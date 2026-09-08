@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ClubGG Table HUD & Card Recognition Visualizer</title>
+  <link rel="stylesheet" href="/static/css/style.css">
   <link rel="stylesheet" href="/static/css/style.css?v={{ version }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -14,6 +15,7 @@
     <div class="logo-group">
       <span class="poker-suit-icon">♠</span>
       <h1>ClubGG Table HUD & Card Visualizer</h1>
+      <span class="version-tag">v1.3</span>
       <span class="version-tag">v1.4</span>
     </div>
 
@@ -40,9 +42,11 @@
       <div id="live-indicator" class="live-status-pill hidden" title="Real-time continuous live stream active">
         <span class="pulse-dot"></span> LIVE (<span id="fps-counter">-- FPS</span>)
       </div>
+      <button class="btn btn-primary" id="btn-capture-live" title="Toggle real-time continuous polling (live stream)">
       <button class="btn btn-primary" id="btn-capture-live" type="button" onclick="window.toggleLivePolling && window.toggleLivePolling()" title="Toggle real-time continuous polling (live stream)">
         <span class="btn-icon">⚡</span> <span id="btn-live-text">Start Live Polling</span>
       </button>
+      <button class="btn btn-secondary" id="btn-snapshot" title="Take a single snapshot and save to captures/">
       <button class="btn btn-secondary" id="btn-snapshot" type="button" onclick="window.captureSnapshot && window.captureSnapshot()" title="Take a single snapshot and save to captures/">
         <span class="btn-icon">📸</span> Snapshot
       </button>
@@ -52,6 +56,7 @@
         </select>
       </div>
       <label class="toggle-control" title="Toggle continuous real-time polling">
+        <input type="checkbox" id="chk-auto-poll">
         <input type="checkbox" id="chk-auto-poll" onchange="window.toggleLivePolling && window.toggleLivePolling(this.checked)">
         <span class="slider"></span>
         <span class="toggle-label">Auto Poll</span>
@@ -185,6 +190,7 @@
     </section>
   </main>
 
+  <script src="/static/js/main.js"></script>
   <script src="/static/js/main.js?v={{ version }}"></script>
 </body>
 </html>

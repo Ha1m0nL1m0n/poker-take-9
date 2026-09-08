@@ -74,18 +74,10 @@ def get_default_capture() -> Optional[str]:
     return files[0]
 
 
-@app.after_request
-def add_no_cache_headers(response):
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
-
-
 @app.route("/")
 def index():
     """Renders the main poker table HUD dashboard."""
-    return render_template("index.html", version=int(time.time()))
+    return render_template("index.html")
 
 
 @app.route("/api/table_state")
