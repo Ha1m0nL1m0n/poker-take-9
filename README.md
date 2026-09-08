@@ -141,5 +141,64 @@ python monitor_app_events.py
 | `--overwrite` | Overwrite existing output JSON instead of auto-incrementing |
 | `--no-capture` | Disable screenshot captures |
 | `--interval <sec>` | Polling interval in seconds (default: `0.15s` / 150ms) |
+| `--detect-table` | Automatically analyze full poker table state (players, stacks, VPIP, pot) on each event |
+
+---
+
+## ♠️ Poker Table Detector & HUD (`table_detector.py`)
+
+Extracts real-time poker table state from ClubGG screenshots and live device screencaps:
+- **Player Count & Seating**: Detects total seated players (e.g. 8/8) vs open empty seats (`Take Seat`).
+- **In-Hand vs Folded**: Distinguishes players holding active cards vs folded players vs sitting out.
+- **Player Metrics**: Extracts username, stack size (chips), VPIP stat score, and current action badge (`Check`, `Call`, `Bet`, `Raise`, `All-In`, `Fold`).
+- **Dealer Button & Positions**: Detects the gold `'D'` coin and automatically assigns positions clockwise: `BTN`, `SB`, `BB`, `UTG`, `UTG+1`, `MP`, `HJ`, `CO`.
+- **Table State**: Reads Total Pot, Board Stage (`PREFLOP`, `FLOP`, `TURN`, `RIVER`), Community Cards, and Table Blinds (e.g. `0.25/0.50`).
+- **Waiting Queue**: Detects the number of waiting players in queue.
+
+### Standalone Usage
+
+1. **Analyze a specific screenshot**:
+   ```powershell
+   python table_detector.py --image captures/event_206_audio.png
+   ```
+
+2. **Capture and analyze live table from connected device**:
+   ```powershell
+   python table_detector.py --screencap
+   ```
+
+3. **Save structured JSON output**:
+   ```powershell
+   python table_detector.py --screencap -o table_state.json
+   ```
+
+### Output Example
+```text
+===========================================================================
+                CLUBGG POKER TABLE DETECTION RESULT
+===========================================================================
+ Table Type       : 8-max (NLH)
+ Blinds           : 0.25/0.5
+ Board Stage      : FLOP (3 cards)
+ Total Pot        : 4.5
+ Dealer Seat      : Seat 2 (BTN)
+ Seated Players   : 8 / 8
+ Active In Hand   : 3
+ Waiting Queue    : 3
+ Analysis Time    : 0.59s
+---------------------------------------------------------------------------
+ Seat       Pos      Username        Stack      VPIP     In Hand    Action    
+---------------------------------------------------------------------------
+ 1          CO       playforfun321   50.50      -        No (fold)  -         
+ 2          BTN      liran levi      33.15      -        YES        -         
+ 3          SB       nativ666        45.45      38%      No (fold)  -         
+ 4          BB       Unknown         51.40      20%      No (fold)  -         
+ 5          UTG      Oridh5          101.81     43%      No (fold)  -         
+ 6          UTG+1    Tzur karmon     28.62      29%      No (fold)  -         
+ 7          MP       gaditz66        19.10      71%      YES        -         
+ 8          HJ       2-7nuts         67.52      63%      YES        -         
+===========================================================================
+```
+
 
 

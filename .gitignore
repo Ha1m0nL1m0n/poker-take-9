@@ -14,6 +14,8 @@ captures/
 *.bat
 
 # Temporary and drive files
+scratch/
 scratch_test.py
 .tmp.*
 .tempmediaStorage/
+

@@ -32,6 +32,13 @@ import time
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(line_buffering=True)
 
+try:
+    from table_detector import ClubGGTableDetector
+    TABLE_DETECTOR_AVAILABLE = True
+except Exception:
+    TABLE_DETECTOR_AVAILABLE = False
+
+
 # ---------------------------------------------------------
 # ADB & Device Management
 # ---------------------------------------------------------
@@ -402,7 +409,8 @@ def extract_foreground_package(raw_window_dump):
 # ---------------------------------------------------------
 def monitor_and_record(serial, target_package="com.nsus.clubgg", output_file="app_events.json",
                        capture_dir="captures", delayed_ms=500, no_capture=False,
-                       capture_source="scrcpy", poll_interval=0.15, audio_debounce_sec=0.35):
+                       capture_source="scrcpy", poll_interval=0.15, audio_debounce_sec=0.35,
+                       detect_table=False):
     
     screen_w, screen_h = get_screen_size(serial)
     scrcpy_wins = find_scrcpy_windows() if sys.platform == "win32" else []
@@ -412,6 +420,8 @@ def monitor_and_record(serial, target_package="com.nsus.clubgg", output_file="ap
     enable_capture = not no_capture
     start_idx = get_next_event_index(capture_dir) if enable_capture else 1
     event_idx = start_idx
+    
+    table_detector = ClubGGTableDetector() if (detect_table and TABLE_DETECTOR_AVAILABLE) else None
     
     capture_mgr = CaptureManager(
         hwnd=scrcpy_hwnd,
@@ -436,6 +446,7 @@ def monitor_and_record(serial, target_package="com.nsus.clubgg", output_file="ap
     print(f" Screen Size      : {screen_w} x {screen_h}")
     print(f" scrcpy Window    : {scrcpy_title} (HWND: {scrcpy_hwnd})")
     print(f" Screenshot Engine: {engine_desc if enable_capture else 'OFF'}")
+    print(f" Poker Table HUD  : {'ENABLED (Real-time seat/pot/stack detection)' if table_detector else 'OFF'}")
     if enable_capture:
         print(f" Captures Dir     : ./{capture_dir}/ (Starting at event_{start_idx:03d})")
     print(f" Output JSON File : {output_file}")
@@ -449,6 +460,23 @@ def monitor_and_record(serial, target_package="com.nsus.clubgg", output_file="ap
     seen_audio_bursts = set()
     active_audio_tracks = {} # track_id -> info dict
     last_audio_burst_time = 0.0
+
+    def analyze_table_async(img_path, ev_record):
+        if not table_detector or not img_path:
+            return
+        for _ in range(25):
+            if os.path.exists(img_path) and os.path.getsize(img_path) > 1000:
+                break
+            time.sleep(0.04)
+        try:
+            t_state = table_detector.detect_table_state(img_path)
+            ev_record["table_state"] = t_state.to_dict()
+            save_json_file()
+            pot_str = f"{t_state.total_pot:.2f}" if t_state.total_pot is not None else "N/A"
+            print(f"              ♠️ TABLE : {t_state.occupied_seats}/{t_state.total_seats} players | Pot: {pot_str} | Board: {t_state.board_stage.upper()} | In-Hand: {t_state.active_players_in_hand}")
+        except Exception:
+            pass
+
 
     # ---------------------------------------------------------
     # Pre-populate Baseline: IGNORE past events on startup!
@@ -564,6 +592,8 @@ def monitor_and_record(serial, target_package="com.nsus.clubgg", output_file="ap
                         }
                         recorded_events.append(event_record)
                         save_json_file()
+                        if table_detector and ev_file:
+                            threading.Thread(target=analyze_table_async, args=(ev_file, event_record), daemon=True).start()
 
             # -------------------------------------------------------------
             # B. Process Audio Signal Power Bursts (Game Sound Effects)
@@ -623,6 +653,8 @@ def monitor_and_record(serial, target_package="com.nsus.clubgg", output_file="ap
                             }
                             recorded_events.append(event_record)
                             save_json_file()
+                            if table_detector and ev_file:
+                                threading.Thread(target=analyze_table_async, args=(ev_file, event_record), daemon=True).start()
 
             # -------------------------------------------------------------
             # C. Process Standard AudioTrack State Changes (Non-Unity Apps)
@@ -666,6 +698,9 @@ def monitor_and_record(serial, target_package="com.nsus.clubgg", output_file="ap
                             }
                             recorded_events.append(event_record)
                             save_json_file()
+                            if table_detector and ev_file:
+                                threading.Thread(target=analyze_table_async, args=(ev_file, event_record), daemon=True).start()
+
 
             # Detect audio track stop
             stopped_tracks = [tid for tid in active_audio_tracks if tid not in current_tracks or current_tracks[tid]["state"] != "active"]
@@ -713,6 +748,7 @@ def main():
     parser.add_argument("--screencap", action="store_true", help="Shortcut for --capture-source adb (full-resolution device screencap)")
     parser.add_argument("--interval", type=float, default=0.15, help="Polling interval in seconds (default: 0.15s / 150ms)")
     parser.add_argument("--audio-debounce", type=float, default=0.35, help="Debounce time in seconds for rapid audio bursts (default: 0.35s)")
+    parser.add_argument("--detect-table", action="store_true", help="Automatically analyze table state (players, stacks, VPIP, pot, cards) on each event")
     
     args = parser.parse_args()
     
@@ -731,9 +767,11 @@ def main():
         no_capture=args.no_capture,
         capture_source=capture_source,
         poll_interval=args.interval,
-        audio_debounce_sec=args.audio_debounce
+        audio_debounce_sec=args.audio_debounce,
+        detect_table=args.detect_table
     )
 
 if __name__ == "__main__":
     main()
+
 
