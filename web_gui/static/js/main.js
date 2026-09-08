@@ -47,7 +47,7 @@ const fpsCounter = document.getElementById("fps-counter");
 const chkAutoPoll = document.getElementById("chk-auto-poll");
 const currentImageTag = document.getElementById("current-image-tag");
 const overlayCanvas = document.getElementById("overlay-canvas");
-const ctx = overlayCanvas.getContext("2d");
+const ctx = overlayCanvas ? overlayCanvas.getContext("2d") : null;
 
 // Checkboxes
 const chkShowSeats = document.getElementById("chk-show-seats");
@@ -71,31 +71,52 @@ const copyHint = document.getElementById("copy-hint");
 // ---------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------
-document.addEventListener("DOMContentLoaded", () => {
-  setupTabs();
-  loadCapturesList();
-  fetchTableState();
-  initCardPackGallery();
-  setupEventListeners();
-});
+function initApp() {
+  console.log("[ClubGG HUD] Initializing HUD Controller...");
+  try { setupTabs(); } catch (e) { console.error("Error setting up tabs:", e); }
+  try { setupEventListeners(); } catch (e) { console.error("Error setting up event listeners:", e); }
+  try { initCardPackGallery(); } catch (e) { console.error("Error initializing gallery:", e); }
+  try { loadCapturesList(); } catch (e) { console.error("Error loading captures:", e); }
+  try { fetchTableState(); } catch (e) { console.error("Error fetching table state:", e); }
+  console.log("[ClubGG HUD] HUD Controller ready.");
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initApp);
+} else {
+  // DOM is already ready (e.g., loaded dynamically or from cache)
+  initApp();
+}
 
 function setupEventListeners() {
-  if (btnCaptureLive) {
-    btnCaptureLive.addEventListener("click", () => toggleLivePolling());
+  const btnLive = document.getElementById("btn-capture-live");
+  const btnSnap = document.getElementById("btn-snapshot");
+  const chkPoll = document.getElementById("chk-auto-poll");
+  const selCap = document.getElementById("select-capture");
+  const btnCopy = document.getElementById("btn-copy-json");
+
+  if (btnLive) {
+    btnLive.addEventListener("click", (e) => {
+      e.preventDefault();
+      toggleLivePolling();
+    });
   }
 
-  if (btnSnapshot) {
-    btnSnapshot.addEventListener("click", captureSnapshot);
+  if (btnSnap) {
+    btnSnap.addEventListener("click", (e) => {
+      e.preventDefault();
+      captureSnapshot();
+    });
   }
 
-  if (chkAutoPoll) {
-    chkAutoPoll.addEventListener("change", (e) => {
+  if (chkPoll) {
+    chkPoll.addEventListener("change", (e) => {
       toggleLivePolling(e.target.checked);
     });
   }
 
-  if (selectCapture) {
-    selectCapture.addEventListener("change", (e) => {
+  if (selCap) {
+    selCap.addEventListener("change", (e) => {
       if (e.target.value) {
         if (isLivePolling) {
           stopLivePolling();
@@ -109,8 +130,8 @@ function setupEventListeners() {
     if (chk) chk.addEventListener("change", renderCanvasOverlay);
   });
 
-  if (btnCopyJson) {
-    btnCopyJson.addEventListener("click", () => {
+  if (btnCopy) {
+    btnCopy.addEventListener("click", () => {
       if (currentData) {
         navigator.clipboard.writeText(JSON.stringify(currentData, null, 2));
         if (copyHint) {
@@ -140,6 +161,7 @@ function setupTabs() {
 // ---------------------------------------------------------
 function toggleLivePolling(forceState = null) {
   const shouldRun = forceState !== null ? forceState : !isLivePolling;
+  console.log(`[ClubGG HUD] toggleLivePolling called: current=${isLivePolling}, target=${shouldRun}`);
   if (shouldRun === isLivePolling) return;
 
   if (shouldRun) {
@@ -151,29 +173,48 @@ function toggleLivePolling(forceState = null) {
 
 function startLivePolling() {
   if (isLivePolling) return;
+  console.log("[ClubGG HUD] Starting live polling loop...");
   isLivePolling = true;
 
-  if (btnCaptureLive) btnCaptureLive.classList.add("btn-live-active");
-  if (btnLiveText) btnLiveText.textContent = "Stop Live Polling";
-  if (liveIndicator) liveIndicator.classList.remove("hidden");
-  if (chkAutoPoll) chkAutoPoll.checked = true;
+  const btnLive = document.getElementById("btn-capture-live");
+  const txtLive = document.getElementById("btn-live-text");
+  const indLive = document.getElementById("live-indicator");
+  const chkPoll = document.getElementById("chk-auto-poll");
+
+  if (btnLive) btnLive.classList.add("btn-live-active");
+  if (txtLive) txtLive.textContent = "Stop Live Polling";
+  if (indLive) indLive.classList.remove("hidden");
+  if (chkPoll) chkPoll.checked = true;
 
   liveLoop();
 }
 
 function stopLivePolling() {
+  console.log("[ClubGG HUD] Stopping live polling loop...");
   isLivePolling = false;
   if (liveAbortController) {
     liveAbortController.abort();
     liveAbortController = null;
   }
 
-  if (btnCaptureLive) btnCaptureLive.classList.remove("btn-live-active");
-  if (btnLiveText) btnLiveText.textContent = "Start Live Polling";
-  if (liveIndicator) liveIndicator.classList.add("hidden");
-  if (chkAutoPoll) chkAutoPoll.checked = false;
-  if (fpsCounter) fpsCounter.textContent = "-- FPS";
+  const btnLive = document.getElementById("btn-capture-live");
+  const txtLive = document.getElementById("btn-live-text");
+  const indLive = document.getElementById("live-indicator");
+  const chkPoll = document.getElementById("chk-auto-poll");
+  const fpsEl = document.getElementById("fps-counter");
+
+  if (btnLive) btnLive.classList.remove("btn-live-active");
+  if (txtLive) txtLive.textContent = "Start Live Polling";
+  if (indLive) indLive.classList.add("hidden");
+  if (chkPoll) chkPoll.checked = false;
+  if (fpsEl) fpsEl.textContent = "-- FPS";
 }
+
+// Expose functions globally for inline HTML events
+window.toggleLivePolling = toggleLivePolling;
+window.startLivePolling = startLivePolling;
+window.stopLivePolling = stopLivePolling;
+window.captureSnapshot = captureSnapshot;
 
 async function liveLoop() {
   fpsStartTime = performance.now();
