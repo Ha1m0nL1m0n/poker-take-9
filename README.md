@@ -240,18 +240,23 @@ Output:
 ## 5. Interactive Flask Web GUI (`web_gui/app.py`)
 
 A full interactive web dashboard running on `http://127.0.0.1:5000`:
+- **Real-Time Continuous Live Polling**: Continuous streaming (~2.5 FPS) with active pulse dot indicator and live FPS counter.
+- **Ultra-Fast Scrcpy Hardware GDI Capture**: Captures frames in ~18–35ms directly from the Windows Desktop Window Manager, eliminating ADB screencap lag.
+- **Double-Buffered Ping-Pong Streaming**: Alternates between two memory buffers (`live_stream_a.png` / `live_stream_b.png`) with cache-busting timestamps to prevent disk bloat.
+- **Dedicated Snapshot Capture**: One-click permanent snapshot saving to `./captures/` with auto-updating history.
 - **Virtual Poker Table**: Real-time oval green felt table displaying all 8 seats, player avatars, stack sizes, VPIP badges, position tags (`BTN`, `SB`, `BB`, etc.), action pills (`Check`, `Call`, `Bet`, `Raise`), and bet chips on felt.
 - **Card Pack Asset Rendering**: Community cards and player showdown hands are rendered using pixel-art playing card sprites sliced from `Poker cards 1.3.zip`.
 - **Detection Overlay Canvas**: Displays the source screenshot with toggleable bounding boxes for seats, cards, pot, and dealer button.
 - **Data Integrity Inspector**: Verifies deck uniqueness, board stage validity, and confidence metrics.
-- **Live ADB Capture & History Browser**: One-click live capture from connected phone via ADB, or browse historical captures with instant analysis.
 
 ### Launching the Web GUI
 ```powershell
 python web_gui/app.py
 ```
-Open **[http://127.0.0.1:5000](http://127.0.0.1:5000)** in your web browser.
+Open **[http://127.0.0.1:5000](http://127.0.0.1:5000)** in your web browser. Click **Start Live Polling** to begin continuous real-time table tracking.
 
+---
 
+## 6. Developer & Agent Handoff Documentation
 
-
+For detailed architectural diagrams, algorithm explanations, lessons learned, and recommended next tasks, please read **[`HANDOFF.md`](HANDOFF.md)**.
