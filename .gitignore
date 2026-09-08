@@ -1,0 +1,19 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test captures and screenshots
+captures/
+*.png
+*.jpg
+*.jpeg
+
+# Test session recordings and generated logs
+*.json
+*.bat
+
+# Temporary and drive files
+scratch_test.py
+.tmp.*
+.tempmediaStorage/
