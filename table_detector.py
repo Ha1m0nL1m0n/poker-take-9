@@ -195,6 +195,12 @@ class ClubGGTableDetector:
             except Exception as e:
                 print(f"[WARN] Failed to initialize Windows OCR: {e}")
 
+        # Temporal Hand State Tracking & Persistence
+        self._last_confirmed_pot: Optional[float] = None
+        self._last_community_cards: List[str] = []
+        self._last_board_stage: str = "preflop"
+        self._seat_usernames: Dict[int, str] = {}
+
 
     async def _run_winrt_ocr(self, img: Image.Image) -> List[Tuple[float, float, float, float, str]]:
         """Runs Windows OCR on image, returning list of (norm_x, norm_y, norm_w, norm_h, text)."""
@@ -291,8 +297,8 @@ class ClubGGTableDetector:
         # 1. Parse Table Blinds & Tournament Info
         table_state.blinds = self._extract_blinds(ocr_words)
 
-        # 2. Parse Total Pot
-        table_state.total_pot = self._extract_total_pot(ocr_words)
+        # 2. Parse Total Pot (with crop fallback)
+        table_state.total_pot = self._extract_total_pot(ocr_words, img)
 
         # 3. Detect Community Cards & Board Stage with CardDetector
         cards, stage, cards_detail, board_integrity = self._detect_community_cards(img)
@@ -317,6 +323,46 @@ class ClubGGTableDetector:
         # 7. Assign Positions (BTN, SB, BB, UTG, etc.)
         self._assign_positions(seats, dealer_seat_id)
 
+        # 8. Temporal Hand State Smoothing
+        is_new_hand = False
+        prev_card_count = len(self._last_community_cards)
+        curr_card_count = len(table_state.community_cards)
+
+        if prev_card_count > 0:
+            if curr_card_count < prev_card_count:
+                # Board cards contracted (e.g. 5 cards down to 0 cards), hand ended
+                is_new_hand = True
+            elif not all(c in table_state.community_cards for c in self._last_community_cards):
+                # Cards on board do not contain previous street's cards, new hand started
+                is_new_hand = True
+
+        if is_new_hand:
+            self._last_confirmed_pot = None
+
+        # Pot Smoothing: Pot in Texas Hold'em is non-decreasing during a hand
+        if table_state.total_pot is not None and table_state.total_pot > 0:
+            if self._last_confirmed_pot is None or table_state.total_pot >= self._last_confirmed_pot:
+                self._last_confirmed_pot = table_state.total_pot
+            elif curr_card_count > 0 and self._last_confirmed_pot is not None:
+                table_state.total_pot = self._last_confirmed_pot
+        else:
+            # If OCR missed the pot during an active hand (cards present or flop/turn/river)
+            if (curr_card_count > 0 or table_state.board_stage != "preflop") and self._last_confirmed_pot is not None:
+                table_state.total_pot = self._last_confirmed_pot
+
+        self._last_community_cards = list(table_state.community_cards)
+        self._last_board_stage = table_state.board_stage
+
+        # Username Smoothing: retain known usernames for occupied seats across frames
+        for seat in seats:
+            if seat.is_occupied and seat.username:
+                self._seat_usernames[seat.seat_id] = seat.username
+            elif seat.is_occupied and not seat.username:
+                if seat.seat_id in self._seat_usernames:
+                    seat.username = self._seat_usernames[seat.seat_id]
+            elif not seat.is_occupied:
+                self._seat_usernames.pop(seat.seat_id, None)
+
         table_state.seats = seats
         table_state.occupied_seats = sum(1 for s in seats if s.is_occupied)
         table_state.active_players_in_hand = sum(1 for s in seats if s.is_in_hand)
@@ -336,23 +382,68 @@ class ClubGGTableDetector:
                     return m.group(1).replace(" ", "")
         return None
 
-    def _extract_total_pot(self, words) -> Optional[float]:
-        # Search around center pot area (norm_y ~ 0.40 .. 0.50)
-        pot_candidates = []
-        for nx, ny, _, _, text in words:
-            if 0.40 <= ny <= 0.52 and 0.35 <= nx <= 0.65:
-                if "pot" in text.lower():
+    def _extract_total_pot(self, words: List[Tuple], img: Optional[Image.Image] = None) -> Optional[float]:
+        """Extracts total pot from center pot badge or felt chips badge with crop OCR fallback."""
+        top_candidates = []
+        lower_candidates = []
+        for nx, ny, nw, nh, text in words:
+            tl = text.lower()
+            if "pot" in tl or "total" in tl or "/" in text:
+                continue
+            m = re.search(r'\d+(?:\.\d+)?', text)
+            if m:
+                try:
+                    val = float(m.group(0))
+                    if 0.1 <= val <= 1000000:
+                        if 0.40 <= ny <= 0.52 and 0.35 <= nx <= 0.65:
+                            top_candidates.append(val)
+                        elif 0.58 <= ny <= 0.65 and 0.40 <= nx <= 0.60:
+                            lower_candidates.append(val)
+                except ValueError:
+                    pass
+
+        if top_candidates:
+            return top_candidates[0]
+        if lower_candidates:
+            return lower_candidates[0]
+
+        # Fast Crop OCR Fallback if global OCR missed the pot
+        if img is not None:
+            w, h = img.size
+            # 1. Targeted crop on Top Pot pill (norm x: 0.40..0.60, y: 0.42..0.50)
+            c1 = img.crop((int(0.40 * w), int(0.42 * h), int(0.60 * w), int(0.50 * h)))
+            c1_2x = c1.resize((c1.width * 2, c1.height * 2), Image.LANCZOS)
+            c1_words = self.run_ocr(c1_2x)
+            for _, _, _, _, text in c1_words:
+                tl = text.lower()
+                if "pot" in tl or "total" in tl or "/" in text:
                     continue
-                # Extract float safely
                 m = re.search(r'\d+(?:\.\d+)?', text)
                 if m:
                     try:
                         val = float(m.group(0))
                         if 0.1 <= val <= 1000000:
-                            pot_candidates.append(val)
+                            return val
                     except ValueError:
                         pass
-        return pot_candidates[0] if pot_candidates else None
+
+            # 2. Targeted crop on Lower Pot chip badge (norm x: 0.40..0.60, y: 0.58..0.65)
+            c2 = img.crop((int(0.40 * w), int(0.58 * h), int(0.60 * w), int(0.65 * h)))
+            c2_2x = c2.resize((c2.width * 2, c2.height * 2), Image.LANCZOS)
+            c2_words = self.run_ocr(c2_2x)
+            for _, _, _, _, text in c2_words:
+                if "/" in text:
+                    continue
+                m = re.search(r'\d+(?:\.\d+)?', text)
+                if m:
+                    try:
+                        val = float(m.group(0))
+                        if 0.1 <= val <= 1000000:
+                            return val
+                    except ValueError:
+                        pass
+
+        return None
 
     def _extract_waiting_queue(self, words) -> Optional[int]:
         for _, ny, _, _, text in words:
@@ -376,8 +467,8 @@ class ClubGGTableDetector:
     def _detect_dealer_button(self, img: Image.Image) -> Optional[int]:
         """Finds gold circular Dealer Button 'D' and maps it to closest seat."""
         w, h = img.size
-        # Search on table felt
-        felt_box = (int(0.05 * w), int(0.20 * h), int(0.95 * w), int(0.75 * h))
+        # Search on table felt (expanded to 0.84 to cover bottom hero positions)
+        felt_box = (int(0.05 * w), int(0.20 * h), int(0.95 * w), int(0.84 * h))
         felt = img.crop(felt_box)
         
         gold_pts = []
@@ -404,10 +495,10 @@ class ClubGGTableDetector:
             if not added:
                 clusters.append([p])
 
-        # Filter for dealer button cluster (circular, ~30 to 200 points)
+        # Filter for dealer button cluster (circular, ~20 to 250 points)
         btn_center = None
         for c in clusters:
-            if 30 <= len(c) <= 250:
+            if 20 <= len(c) <= 250:
                 cx = sum(pt[0] for pt in c) / len(c)
                 cy = sum(pt[1] for pt in c) / len(c)
                 btn_center = (cx / w, cy / h)
@@ -551,8 +642,29 @@ class ClubGGTableDetector:
 
         if name_tokens:
             name_tokens.sort(key=lambda x: x[0])
-            seat.username = " ".join(t[1] for t in name_tokens)
+            raw_name = " ".join(t[1] for t in name_tokens)
+            seat.username = re.sub(r'[^\x20-\x7E]', '', raw_name).strip()
             seat.is_occupied = True
+
+        # Targeted Crop Fallback for Username (handles Hero gold font, active timer borders, low contrast)
+        if not seat.username and (seat.is_occupied or seat.is_in_hand or seat.stack is not None):
+            nbx1, nby1, nbx2, nby2 = seat_cfg["name_box"]
+            n_crop = img.crop((int(nbx1 * w), int(nby1 * h), int(nbx2 * w), int(nby2 * h)))
+            n_crop_2x = n_crop.resize((n_crop.width * 2, n_crop.height * 2), Image.LANCZOS)
+            crop_words = self.run_ocr(n_crop_2x)
+            c_tokens = []
+            for _, _, _, _, text in crop_words:
+                tl = text.lower()
+                if any(act in tl for act in action_keywords):
+                    continue
+                if text in ['.', '-', ':', '4.', '35', '48', '50', '23', 'seat', 'take']:
+                    continue
+                if len(text) >= 2:
+                    c_tokens.append(text)
+            if c_tokens:
+                raw_crop_name = " ".join(c_tokens)
+                seat.username = re.sub(r'[^\x20-\x7E]', '', raw_crop_name).strip()
+                seat.is_occupied = True
 
         # Check Sitting Out
         if "sitting" in all_text_lower or "away" in all_text_lower:
