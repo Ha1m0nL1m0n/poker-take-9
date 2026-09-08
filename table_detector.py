@@ -55,7 +55,7 @@ SEATS_8MAX = [
         "name_box": (0.03, 0.300, 0.20, 0.328),
         "stack_box": (0.03, 0.328, 0.20, 0.355),
         "vpip_box": (0.00, 0.28, 0.08, 0.33),
-        "bet_box": (0.18, 0.32, 0.32, 0.37),
+        "bet_box": (0.18, 0.32, 0.32, 0.38),
     },
     {
         "seat_id": 2,
@@ -65,7 +65,7 @@ SEATS_8MAX = [
         "name_box": (0.40, 0.210, 0.60, 0.233),
         "stack_box": (0.40, 0.233, 0.60, 0.258),
         "vpip_box": (0.36, 0.19, 0.44, 0.24),
-        "bet_box": (0.44, 0.26, 0.56, 0.31),
+        "bet_box": (0.42, 0.26, 0.58, 0.31),
     },
     {
         "seat_id": 3,
@@ -75,7 +75,7 @@ SEATS_8MAX = [
         "name_box": (0.80, 0.300, 0.98, 0.328),
         "stack_box": (0.80, 0.328, 0.98, 0.355),
         "vpip_box": (0.76, 0.28, 0.84, 0.33),
-        "bet_box": (0.68, 0.32, 0.82, 0.37),
+        "bet_box": (0.68, 0.32, 0.82, 0.38),
     },
     {
         "seat_id": 4,
@@ -85,7 +85,7 @@ SEATS_8MAX = [
         "name_box": (0.80, 0.410, 0.98, 0.438),
         "stack_box": (0.80, 0.438, 0.98, 0.465),
         "vpip_box": (0.76, 0.39, 0.84, 0.44),
-        "bet_box": (0.68, 0.41, 0.82, 0.46),
+        "bet_box": (0.68, 0.40, 0.82, 0.47),
     },
     {
         "seat_id": 5,
@@ -95,7 +95,7 @@ SEATS_8MAX = [
         "name_box": (0.78, 0.620, 0.98, 0.652),
         "stack_box": (0.78, 0.652, 0.98, 0.678),
         "vpip_box": (0.75, 0.60, 0.83, 0.65),
-        "bet_box": (0.65, 0.56, 0.80, 0.62),
+        "bet_box": (0.66, 0.64, 0.80, 0.72),
     },
     {
         "seat_id": 6,
@@ -105,7 +105,7 @@ SEATS_8MAX = [
         "name_box": (0.06, 0.800, 0.26, 0.828),
         "stack_box": (0.06, 0.828, 0.26, 0.855),
         "vpip_box": (0.02, 0.77, 0.12, 0.82),
-        "bet_box": (0.24, 0.70, 0.38, 0.76),
+        "bet_box": (0.32, 0.74, 0.48, 0.81),
     },
     {
         "seat_id": 7,
@@ -115,7 +115,7 @@ SEATS_8MAX = [
         "name_box": (0.02, 0.610, 0.22, 0.640),
         "stack_box": (0.02, 0.640, 0.22, 0.665),
         "vpip_box": (0.00, 0.60, 0.08, 0.65),
-        "bet_box": (0.18, 0.56, 0.32, 0.62),
+        "bet_box": (0.20, 0.64, 0.34, 0.72),
     },
     {
         "seat_id": 8,
@@ -125,7 +125,7 @@ SEATS_8MAX = [
         "name_box": (0.02, 0.410, 0.22, 0.438),
         "stack_box": (0.02, 0.438, 0.22, 0.465),
         "vpip_box": (0.00, 0.39, 0.08, 0.44),
-        "bet_box": (0.18, 0.41, 0.32, 0.46),
+        "bet_box": (0.18, 0.40, 0.32, 0.47),
     }
 ]
 
@@ -437,12 +437,15 @@ class ClubGGTableDetector:
         
         seat = PlayerSeat(seat_id=sid, name=sname)
 
-        # 1. Check Words in this Seat Box
+        # 1. Check Words in this Seat Box (excluding any bet tokens to prevent stack/username pollution)
         seat_words = []
         for nx, ny, nw, nh, text in words:
             cx = nx + nw / 2.0
             cy = ny + nh / 2.0
-            if (bx1 - 0.03) <= cx <= (bx2 + 0.03) and (by1 - 0.02) <= cy <= (by2 + 0.03):
+            # Exclude tokens situated inside any seat's bet box
+            if any(s["bet_box"][0] <= cx <= s["bet_box"][2] and s["bet_box"][1] <= cy <= s["bet_box"][3] for s in SEATS_8MAX):
+                continue
+            if (bx1 - 0.02) <= cx <= (bx2 + 0.02) and (by1 - 0.02) <= cy <= (by2 + 0.02):
                 is_cyan = self._is_cyan_token(img, nx, ny, nw, nh)
                 seat_words.append((cx, cy, nw, nh, text, is_cyan))
 
@@ -556,19 +559,79 @@ class ClubGGTableDetector:
             seat.is_sitting_out = True
 
         # Check Bet Amount on Felt
-        bet_x1, bet_y1, bet_x2, bet_y2 = seat_cfg["bet_box"]
-        for nx, ny, _, _, text in words:
-            if bet_x1 <= nx <= bet_x2 and bet_y1 <= ny <= bet_y2:
-                m_bet = re.search(r'\d+(?:\.\d+)?', text)
-                if m_bet:
-                    try:
-                        b_val = float(m_bet.group(0))
-                        if 0.01 <= b_val <= 100000:
-                            seat.current_bet = b_val
-                    except ValueError:
-                        pass
+        seat.current_bet = self._extract_bet_amount(words, seat_cfg["bet_box"], img, seat.is_occupied or seat.is_in_hand)
 
         return seat
+
+    def _extract_bet_amount(self, words: List[Tuple], bet_box: Tuple[float, float, float, float],
+                            img: Optional[Image.Image] = None, allow_crop_ocr: bool = True) -> Optional[float]:
+        """Extracts bet chips and amount on the felt inside bet_box, with split-token handling and fast crop fallback."""
+        bx1, by1, bx2, by2 = bet_box
+        matching = []
+        for nx, ny, nw, nh, text in words:
+            cx = nx + nw / 2.0
+            cy = ny + nh / 2.0
+            if bx1 <= cx <= bx2 and by1 <= cy <= by2:
+                matching.append((cx, cy, text))
+
+        val = self._parse_bet_tokens(matching)
+
+        # Fast fallback: If no bet found via full-image OCR, check if targeted crop OCR can find it
+        if val is None and allow_crop_ocr and img is not None:
+            w, h = img.size
+            crop_box = (int(bx1 * w), int(by1 * h), int(bx2 * w), int(by2 * h))
+            crop = img.crop(crop_box)
+            crop_words = self.run_ocr(crop)
+            if crop_words:
+                crop_matching = [(t[0] + t[2]/2.0, t[1] + t[3]/2.0, t[4]) for t in crop_words]
+                val = self._parse_bet_tokens(crop_matching)
+
+        return val
+
+    def _parse_bet_tokens(self, tokens: List[Tuple]) -> Optional[float]:
+        """Parses bet numerical value from a list of (cx, cy, text) tokens."""
+        if not tokens:
+            return None
+
+        tokens = sorted(tokens, key=lambda t: t[0])
+        noise = {"e", ".", "-", ":", "gps&ip", "restriction", "blinds", "run", "it", "multi", "time"}
+        raw_texts = [t[2].strip() for t in tokens if t[2].strip().lower() not in noise]
+        if not raw_texts:
+            return None
+
+        joined = "".join(raw_texts)
+
+        # Handle omitted decimal point on numbers with leading zero, e.g. "050" -> 0.50, "025" -> 0.25
+        if re.match(r'^0\d{2}$', joined):
+            try:
+                return float("0." + joined[1:])
+            except ValueError:
+                pass
+
+        # Handle split tokens, e.g. ["0", "25"] -> 0.25
+        if len(raw_texts) == 2 and raw_texts[0] == "0" and raw_texts[1].isdigit():
+            try:
+                return float("0." + raw_texts[1])
+            except ValueError:
+                pass
+
+        # Parse standard floats from joined or individual tokens
+        for t in [joined] + raw_texts:
+            if re.match(r'^0\d{2}$', t):
+                try:
+                    return float("0." + t[1:])
+                except ValueError:
+                    pass
+            m = re.search(r'\d+(?:\.\d+)?', t)
+            if m:
+                try:
+                    candidate = float(m.group(0))
+                    if 0.01 <= candidate <= 500000:
+                        return candidate
+                except ValueError:
+                    pass
+
+        return None
 
 
     def _assign_positions(self, seats: List[PlayerSeat], dealer_seat_id: Optional[int]):
@@ -655,20 +718,21 @@ def main():
     print(f" Active In Hand   : {state.active_players_in_hand}")
     print(f" Waiting Queue    : {state.waiting_players if state.waiting_players is not None else 'N/A'}")
     print(f" Analysis Time    : {elapsed:.2f}s")
-    print("-" * 75)
-    print(f" {'Seat':<10} {'Pos':<8} {'Username':<15} {'Stack':<10} {'VPIP':<8} {'In Hand':<10} {'Action':<10}")
-    print("-" * 75)
+    print("-" * 85)
+    print(f" {'Seat':<6} {'Pos':<8} {'Username':<15} {'Stack':<10} {'Bet':<10} {'VPIP':<8} {'In Hand':<10} {'Action':<10}")
+    print("-" * 85)
     for s in state.seats:
         if s.is_occupied:
             in_hand_str = "YES" if s.is_in_hand else "No (fold)"
             vpip_str = f"{s.vpip}%" if s.vpip is not None else "-"
             stack_str = f"{s.stack:.2f}" if s.stack is not None else "-"
+            bet_str = f"{s.current_bet:.2f}" if s.current_bet is not None else "-"
             action_str = s.action or "-"
             pos_str = s.position or "-"
-            print(f" {s.seat_id:<10} {pos_str:<8} {s.username or 'Unknown':<15} {stack_str:<10} {vpip_str:<8} {in_hand_str:<10} {action_str:<10}")
+            print(f" {s.seat_id:<6} {pos_str:<8} {s.username or 'Unknown':<15} {stack_str:<10} {bet_str:<10} {vpip_str:<8} {in_hand_str:<10} {action_str:<10}")
         else:
-            print(f" {s.seat_id:<10} {'-':<8} {'[EMPTY SEAT]':<15} {'-':<10} {'-':<8} {'-':<10} {'Take Seat':<10}")
-    print("=" * 75)
+            print(f" {s.seat_id:<6} {'-':<8} {'[EMPTY SEAT]':<15} {'-':<10} {'-':<10} {'-':<8} {'-':<10} {'Take Seat':<10}")
+    print("=" * 85)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:

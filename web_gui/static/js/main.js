@@ -528,6 +528,33 @@ function renderCanvasOverlay() {
         ctx.font = "bold 14px monospace";
         ctx.fillText(`Seat ${s.seat_id}: ${s.username || (s.is_occupied ? 'Occupied' : 'Empty')}`, x + 4, y + 16);
       }
+
+      // 8-max layout bet geometry normalized
+      const BET_GEOM = [
+        [0.18, 0.32, 0.32, 0.38],
+        [0.42, 0.26, 0.58, 0.31],
+        [0.68, 0.32, 0.82, 0.38],
+        [0.68, 0.40, 0.82, 0.47],
+        [0.66, 0.64, 0.80, 0.72],
+        [0.32, 0.74, 0.48, 0.81],
+        [0.20, 0.64, 0.34, 0.72],
+        [0.18, 0.40, 0.32, 0.47]
+      ];
+      const betBox = BET_GEOM[s.seat_id - 1];
+      if (betBox && (s.current_bet || s.is_occupied)) {
+        const bx = betBox[0] * W;
+        const by = betBox[1] * H;
+        const bw = (betBox[2] - betBox[0]) * W;
+        const bh = (betBox[3] - betBox[1]) * H;
+        ctx.strokeStyle = s.current_bet ? "#f1c40f" : "rgba(241, 196, 15, 0.25)";
+        ctx.lineWidth = s.current_bet ? 2 : 1;
+        ctx.strokeRect(bx, by, bw, bh);
+        if (s.current_bet) {
+          ctx.fillStyle = "#f1c40f";
+          ctx.font = "bold 13px monospace";
+          ctx.fillText(`Bet: ${s.current_bet}`, bx + 4, by + 14);
+        }
+      }
     });
   }
 
