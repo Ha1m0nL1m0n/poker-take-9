@@ -221,7 +221,6 @@ class CLSID(ctypes.Structure):
 PNG_CLSID = CLSID(0x557cf406, 0x1a04, 0x11d3, (ctypes.c_ubyte * 8)(0x9a, 0x73, 0x00, 0x00, 0xf8, 0x1e, 0xf3, 0x2e))
 
 class CaptureManager:
-    def __init__(self, hwnd, serial, screen_w, screen_h, capture_dir="captures", delayed_ms=500, enabled=True):
     def __init__(self, hwnd, serial, screen_w, screen_h, capture_dir="captures", delayed_ms=500, enabled=True, capture_source="scrcpy"):
         self.hwnd = hwnd
         self.serial = serial
@@ -252,7 +251,6 @@ class CaptureManager:
             return False
             
         with self.gdi_lock:
-            if self.hwnd and self.gdiplus_ready:
             if self.capture_source == "adb":
                 return self._capture_adb_screencap(self.serial, out_path)
             elif self.hwnd and self.gdiplus_ready:
@@ -571,7 +569,6 @@ def scrcpy_mouse_worker(scrcpy_hwnd, screen_w, screen_h, event_q, stop_event, ca
                 
         time.sleep(0.01)
 
-def record_touches(serial, output_file, mode="both", max_count=None, capture_dir="captures", delayed_ms=500, no_capture=False):
 def record_touches(serial, output_file, mode="both", max_count=None, capture_dir="captures", delayed_ms=500, no_capture=False, capture_source="scrcpy"):
     screen_w, screen_h = get_screen_size(serial)
     dev_path, dev_name, max_x, max_y = get_touch_device_info(serial)
@@ -592,7 +589,6 @@ def record_touches(serial, output_file, mode="both", max_count=None, capture_dir
         screen_h=screen_h,
         capture_dir=capture_dir,
         delayed_ms=delayed_ms,
-        enabled=enable_capture
         enabled=enable_capture,
         capture_source=capture_source
     )
@@ -846,7 +842,6 @@ def main():
         max_count=args.count,
         capture_dir=args.capture_dir,
         delayed_ms=args.delayed_ms,
-        no_capture=args.no_capture
         no_capture=args.no_capture,
         capture_source=capture_source
     )

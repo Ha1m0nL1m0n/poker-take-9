@@ -52,8 +52,8 @@ SEATS_8MAX = [
         "name": "Seat 1 (Top-Left)",
         "box": (0.00, 0.25, 0.25, 0.36),
         "card_box": (0.02, 0.26, 0.17, 0.31),
-        "name_box": (0.03, 0.30, 0.22, 0.34),
-        "stack_box": (0.04, 0.32, 0.20, 0.36),
+        "name_box": (0.03, 0.300, 0.20, 0.328),
+        "stack_box": (0.03, 0.328, 0.20, 0.355),
         "vpip_box": (0.00, 0.28, 0.08, 0.33),
         "bet_box": (0.18, 0.32, 0.32, 0.37),
     },
@@ -62,8 +62,8 @@ SEATS_8MAX = [
         "name": "Seat 2 (Top-Center)",
         "box": (0.38, 0.16, 0.62, 0.27),
         "card_box": (0.42, 0.17, 0.57, 0.22),
-        "name_box": (0.40, 0.21, 0.60, 0.24),
-        "stack_box": (0.42, 0.23, 0.58, 0.26),
+        "name_box": (0.40, 0.210, 0.60, 0.233),
+        "stack_box": (0.40, 0.233, 0.60, 0.258),
         "vpip_box": (0.36, 0.19, 0.44, 0.24),
         "bet_box": (0.44, 0.26, 0.56, 0.31),
     },
@@ -72,8 +72,8 @@ SEATS_8MAX = [
         "name": "Seat 3 (Top-Right)",
         "box": (0.75, 0.25, 1.00, 0.36),
         "card_box": (0.82, 0.26, 0.97, 0.31),
-        "name_box": (0.78, 0.30, 0.98, 0.34),
-        "stack_box": (0.80, 0.32, 0.96, 0.36),
+        "name_box": (0.80, 0.300, 0.98, 0.328),
+        "stack_box": (0.80, 0.328, 0.98, 0.355),
         "vpip_box": (0.76, 0.28, 0.84, 0.33),
         "bet_box": (0.68, 0.32, 0.82, 0.37),
     },
@@ -82,8 +82,8 @@ SEATS_8MAX = [
         "name": "Seat 4 (Mid-Right)",
         "box": (0.75, 0.36, 1.00, 0.47),
         "card_box": (0.82, 0.37, 0.97, 0.42),
-        "name_box": (0.78, 0.41, 0.98, 0.45),
-        "stack_box": (0.80, 0.43, 0.96, 0.47),
+        "name_box": (0.80, 0.410, 0.98, 0.438),
+        "stack_box": (0.80, 0.438, 0.98, 0.465),
         "vpip_box": (0.76, 0.39, 0.84, 0.44),
         "bet_box": (0.68, 0.41, 0.82, 0.46),
     },
@@ -92,8 +92,8 @@ SEATS_8MAX = [
         "name": "Seat 5 (Bottom-Right)",
         "box": (0.74, 0.56, 1.00, 0.68),
         "card_box": (0.81, 0.57, 0.96, 0.62),
-        "name_box": (0.78, 0.62, 0.98, 0.65),
-        "stack_box": (0.80, 0.64, 0.96, 0.68),
+        "name_box": (0.78, 0.620, 0.98, 0.652),
+        "stack_box": (0.78, 0.652, 0.98, 0.678),
         "vpip_box": (0.75, 0.60, 0.83, 0.65),
         "bet_box": (0.65, 0.56, 0.80, 0.62),
     },
@@ -102,8 +102,8 @@ SEATS_8MAX = [
         "name": "Seat 6 (Bottom-Left)",
         "box": (0.03, 0.73, 0.35, 0.86),
         "card_box": (0.06, 0.74, 0.26, 0.81),
-        "name_box": (0.04, 0.80, 0.30, 0.84),
-        "stack_box": (0.06, 0.82, 0.26, 0.86),
+        "name_box": (0.06, 0.800, 0.26, 0.828),
+        "stack_box": (0.06, 0.828, 0.26, 0.855),
         "vpip_box": (0.02, 0.77, 0.12, 0.82),
         "bet_box": (0.24, 0.70, 0.38, 0.76),
     },
@@ -112,8 +112,8 @@ SEATS_8MAX = [
         "name": "Seat 7 (Lower-Mid-Left)",
         "box": (0.00, 0.56, 0.26, 0.68),
         "card_box": (0.02, 0.57, 0.19, 0.63),
-        "name_box": (0.02, 0.62, 0.22, 0.65),
-        "stack_box": (0.04, 0.64, 0.20, 0.68),
+        "name_box": (0.02, 0.610, 0.22, 0.640),
+        "stack_box": (0.02, 0.640, 0.22, 0.665),
         "vpip_box": (0.00, 0.60, 0.08, 0.65),
         "bet_box": (0.18, 0.56, 0.32, 0.62),
     },
@@ -122,8 +122,8 @@ SEATS_8MAX = [
         "name": "Seat 8 (Mid-Left)",
         "box": (0.00, 0.36, 0.26, 0.47),
         "card_box": (0.02, 0.37, 0.17, 0.42),
-        "name_box": (0.02, 0.41, 0.22, 0.45),
-        "stack_box": (0.04, 0.43, 0.20, 0.47),
+        "name_box": (0.02, 0.410, 0.22, 0.438),
+        "stack_box": (0.02, 0.438, 0.22, 0.465),
         "vpip_box": (0.00, 0.39, 0.08, 0.44),
         "bet_box": (0.18, 0.41, 0.32, 0.46),
     }
@@ -244,6 +244,26 @@ class ClubGGTableDetector:
             res = loop.run_until_complete(self._run_winrt_ocr(img))
             loop.close()
             return res
+
+    def _is_cyan_token(self, img: Image.Image, nx: float, ny: float, nw: float, nh: float) -> bool:
+        """Determines if an OCR word consists of ClubGG neon cyan stack text."""
+        w, h = img.size
+        x1 = max(0, int(nx * w))
+        y1 = max(0, int(ny * h))
+        x2 = min(w, int((nx + nw) * w))
+        y2 = min(h, int((ny + nh) * h))
+        if x2 <= x1 or y2 <= y1:
+            return False
+        crop = img.crop((x1, y1, x2, y2))
+        cw, ch = crop.size
+        total = cw * ch
+        if total == 0:
+            return False
+        cyan_count = sum(
+            1 for y in range(ch) for x in range(cw)
+            if crop.getpixel((x, y))[0] < 120 and crop.getpixel((x, y))[1] > 140 and crop.getpixel((x, y))[2] > 170
+        )
+        return (cyan_count / float(total)) > 0.04
 
     def detect_table_state(self, image_input) -> PokerTableState:
         """Main detection entrypoint taking PIL Image or file path."""
@@ -420,11 +440,13 @@ class ClubGGTableDetector:
         # 1. Check Words in this Seat Box
         seat_words = []
         for nx, ny, nw, nh, text in words:
-            # Word center inside seat bounding box
-            if (bx1 - 0.03) <= nx <= (bx2 + 0.03) and (by1 - 0.02) <= ny <= (by2 + 0.03):
-                seat_words.append((nx, ny, text))
+            cx = nx + nw / 2.0
+            cy = ny + nh / 2.0
+            if (bx1 - 0.03) <= cx <= (bx2 + 0.03) and (by1 - 0.02) <= cy <= (by2 + 0.03):
+                is_cyan = self._is_cyan_token(img, nx, ny, nw, nh)
+                seat_words.append((cx, cy, nw, nh, text, is_cyan))
 
-        all_text_lower = " ".join(t[2].lower() for t in seat_words)
+        all_text_lower = " ".join(t[4].lower() for t in seat_words)
         
         # Check empty seat
         if "take" in all_text_lower and "seat" in all_text_lower:
@@ -441,7 +463,7 @@ class ClubGGTableDetector:
 
         # 3. Action Badges (Check, Call, Bet, Raise, All-In, WIN)
         action_keywords = ["check", "call", "bet", "raise", "all-in", "allin", "fold", "win"]
-        for _, _, text in seat_words:
+        for _, _, _, _, text, _ in seat_words:
             tl = text.lower().replace("-", "")
             for act in action_keywords:
                 if act in tl:
@@ -450,30 +472,44 @@ class ClubGGTableDetector:
             if seat.action:
                 break
 
-        # 4. Stack Size (Cyan / Blue number below name)
-        # Look for numbers with decimal e.g. 14.89, 47.43 or integers like 47
-        stack_candidates = []
-        for nx, ny, text in seat_words:
+        # 4. Stack Size (Neon Cyan token has 1st priority; fallback to lowest number in box)
+        stack_val = None
+        cyan_words = [w for w in seat_words if w[5]]
+        for _, _, _, _, text, _ in cyan_words:
             clean = re.sub(r'[^\d\.]', '', text)
             if clean and clean.count('.') <= 1:
                 try:
                     val = float(clean)
                     if 0.01 <= val <= 1000000 and val != sid:
-                        stack_candidates.append((ny, val))
+                        stack_val = val
+                        break
                 except ValueError:
                     pass
-        
-        if stack_candidates:
-            # Stack is lowest down in the seat box
-            stack_candidates.sort(key=lambda x: x[0], reverse=True)
-            seat.stack = stack_candidates[0][1]
+
+        if stack_val is None:
+            stack_candidates = []
+            for cx, cy, nw, nh, text, _ in seat_words:
+                clean = re.sub(r'[^\d\.]', '', text)
+                if clean and clean.count('.') <= 1:
+                    try:
+                        val = float(clean)
+                        if 0.01 <= val <= 1000000 and val != sid:
+                            stack_candidates.append((cy, val))
+                    except ValueError:
+                        pass
+            if stack_candidates:
+                stack_candidates.sort(key=lambda x: x[0], reverse=True)
+                stack_val = stack_candidates[0][1]
+
+        if stack_val is not None:
+            seat.stack = stack_val
             seat.is_occupied = True
 
         # 5. VPIP Score (Badge top-left of name)
         vbx1, vby1, vbx2, vby2 = seat_cfg["vpip_box"]
         vpip_words = []
-        for nx, ny, text in seat_words:
-            if (vbx1 - 0.04) <= nx <= (vbx2 + 0.04) and (by1 - 0.02) <= ny <= (by1 + 0.08):
+        for cx, cy, nw, nh, text, _ in seat_words:
+            if (vbx1 - 0.04) <= cx <= (vbx2 + 0.04) and (by1 - 0.02) <= cy <= (by1 + 0.08):
                 clean = re.sub(r'\D', '', text)
                 if clean and 5 <= int(clean) <= 100:
                     vpip_words.append(int(clean))
@@ -481,10 +517,12 @@ class ClubGGTableDetector:
             seat.vpip = vpip_words[0]
             seat.is_occupied = True
 
-        # 6. Username
+        # 6. Username (Non-cyan text scoped to the dark capsule)
+        name_x1, name_y1, name_x2, name_y2 = seat_cfg["name_box"]
         name_tokens = []
-        for nx, ny, text in seat_words:
-            # Skip if it's the stack, vpip, or action badge
+        for cx, cy, nw, nh, text, is_cyan in seat_words:
+            if is_cyan:
+                continue
             tl = text.lower()
             if any(act in tl for act in action_keywords):
                 continue
@@ -495,13 +533,22 @@ class ClubGGTableDetector:
                         continue
                 except ValueError:
                     pass
-            if text.isdigit() and seat.vpip and int(text) == seat.vpip:
+            # Confine to capsule zone (excludes avatar side badges)
+            if not ((name_x1 - 0.04) <= cx <= (name_x2 + 0.04) and (name_y1 - 0.02) <= cy <= (name_y2 + 0.03)):
                 continue
-            if len(text) >= 2 and not text.isdigit():
-                name_tokens.append(text)
+            clean_num = re.sub(r'\D', '', text)
+            if text.isdigit() and len(text) <= 2:
+                continue
+            if text.startswith('(') and text.endswith(')') and clean_num.isdigit():
+                continue
+            if text in ['.', '-', ':', '4.', '35', '48', '50', '23']:
+                continue
+            if len(text) >= 2:
+                name_tokens.append((cx, text))
 
         if name_tokens:
-            seat.username = " ".join(name_tokens)
+            name_tokens.sort(key=lambda x: x[0])
+            seat.username = " ".join(t[1] for t in name_tokens)
             seat.is_occupied = True
 
         # Check Sitting Out

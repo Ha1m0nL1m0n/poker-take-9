@@ -26,6 +26,7 @@ from flask import Flask, render_template, jsonify, request, send_from_directory
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from table_detector import ClubGGTableDetector
 from card_detector import CardDetector
+from record_touches import find_scrcpy_windows, CaptureManager
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
@@ -38,6 +39,27 @@ latest_state: Dict[str, Any] = {}
 latest_image_path: Optional[str] = None
 
 CAPTURES_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "captures"))
+
+# Fast hardware-accelerated scrcpy capture instance
+capture_mgr: Optional[CaptureManager] = None
+
+def get_or_init_capture_mgr() -> Optional[CaptureManager]:
+    global capture_mgr
+    if capture_mgr is not None and getattr(capture_mgr, "gdiplus_ready", False):
+        return capture_mgr
+    if sys.platform == "win32":
+        wins = find_scrcpy_windows()
+        if wins:
+            capture_mgr = CaptureManager(
+                hwnd=wins[0][0],
+                serial="",
+                screen_w=1008,
+                screen_h=2244,
+                capture_dir=CAPTURES_DIR,
+                enabled=True
+            )
+            return capture_mgr
+    return None
 
 
 def get_default_capture() -> Optional[str]:
@@ -129,42 +151,78 @@ def analyze_capture():
     })
 
 
-@app.route("/api/capture_live", methods=["POST"])
+@app.route("/api/capture_live", methods=["POST", "GET"])
 def capture_live():
-    """Captures a live hardware screencap via ADB and analyzes it immediately."""
+    """Captures a live frame (via scrcpy hardware acceleration if open, or ADB screencap) and analyzes it immediately."""
     global latest_state, latest_image_path
     os.makedirs(CAPTURES_DIR, exist_ok=True)
-    
-    timestamp_str = time.strftime("%Y%m%d_%H%M%S")
-    live_filename = f"live_{timestamp_str}.png"
-    target_path = os.path.join(CAPTURES_DIR, live_filename)
 
-    try:
-        # Run ADB hardware screencap
-        cmd = ["adb", "exec-out", "screencap", "-p"]
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
-        if proc.returncode != 0 or len(proc.stdout) < 1000:
-            return jsonify({"success": False, "error": f"ADB capture failed: {proc.stderr.decode()}"}), 500
+    save_permanent = request.args.get("save", "false").lower() in ("true", "1")
+    source_pref = request.args.get("source", "auto").lower()
 
-        with open(target_path, "wb") as f:
-            f.write(proc.stdout)
+    if not hasattr(capture_live, "_toggle"):
+        capture_live._toggle = False
+    capture_live._toggle = not capture_live._toggle
 
-        t0 = time.time()
-        state = detector.detect_table_state(target_path)
-        elapsed = round(time.time() - t0, 3)
+    if save_permanent:
+        timestamp_str = time.strftime("%Y%m%d_%H%M%S")
+        live_filename = f"live_{timestamp_str}.png"
+    else:
+        live_filename = "live_stream_a.png" if capture_live._toggle else "live_stream_b.png"
 
-        latest_state = state.to_dict()
-        latest_state["analysis_time_sec"] = elapsed
-        latest_image_path = live_filename
+    target_path = os.path.abspath(os.path.join(CAPTURES_DIR, live_filename))
+    t_cap_start = time.time()
+    used_source = "adb"
+    captured = False
 
-        return jsonify({
-            "success": True,
-            "image_name": latest_image_path,
-            "image_url": f"/captures/{latest_image_path}",
-            "state": latest_state
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    # 1. Try ultra-fast hardware scrcpy capture (~18ms)
+    if source_pref != "adb":
+        mgr = get_or_init_capture_mgr()
+        if mgr:
+            try:
+                captured = mgr.capture_now(target_path)
+                if captured:
+                    used_source = "scrcpy"
+            except Exception:
+                captured = False
+
+    # 2. Fallback to ADB screencap if scrcpy is unavailable
+    if not captured:
+        try:
+            cmd = ["adb", "exec-out", "screencap", "-p"]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
+            if proc.returncode == 0 and len(proc.stdout) > 1000:
+                with open(target_path, "wb") as f:
+                    f.write(proc.stdout)
+                captured = True
+                used_source = "adb"
+            else:
+                return jsonify({"success": False, "error": f"ADB capture failed: {proc.stderr.decode()}"}), 500
+        except Exception as e:
+            return jsonify({"success": False, "error": f"Capture error: {str(e)}"}), 500
+
+    cap_elapsed_ms = round((time.time() - t_cap_start) * 1000, 1)
+
+    # 3. Analyze Table State
+    t0 = time.time()
+    state = detector.detect_table_state(target_path)
+    elapsed = round(time.time() - t0, 3)
+
+    latest_state = state.to_dict()
+    latest_state["analysis_time_sec"] = elapsed
+    latest_state["capture_time_ms"] = cap_elapsed_ms
+    latest_state["capture_source"] = used_source
+    latest_image_path = live_filename
+
+    return jsonify({
+        "success": True,
+        "source": used_source,
+        "capture_time_ms": cap_elapsed_ms,
+        "analysis_time_sec": elapsed,
+        "image_name": live_filename,
+        "image_url": f"/captures/{live_filename}?t={int(time.time() * 1000)}",
+        "state": latest_state
+    })
 
 
 @app.route("/captures/<path:filename>")

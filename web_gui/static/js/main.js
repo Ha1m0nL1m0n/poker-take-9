@@ -23,7 +23,10 @@ const SUIT_DISPLAY = {
 
 let currentData = null;
 let currentImage = null;
-let pollTimer = null;
+let isLivePolling = false;
+let liveAbortController = null;
+let frameCount = 0;
+let fpsStartTime = 0;
 
 // DOM Elements
 const headerBlinds = document.getElementById("header-blinds");
@@ -37,6 +40,10 @@ const seatsRing = document.getElementById("seats-ring");
 const analysisTimeStamp = document.getElementById("analysis-time-stamp");
 const selectCapture = document.getElementById("select-capture");
 const btnCaptureLive = document.getElementById("btn-capture-live");
+const btnLiveText = document.getElementById("btn-live-text");
+const btnSnapshot = document.getElementById("btn-snapshot");
+const liveIndicator = document.getElementById("live-indicator");
+const fpsCounter = document.getElementById("fps-counter");
 const chkAutoPoll = document.getElementById("chk-auto-poll");
 const currentImageTag = document.getElementById("current-image-tag");
 const overlayCanvas = document.getElementById("overlay-canvas");
@@ -73,33 +80,46 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function setupEventListeners() {
-  btnCaptureLive.addEventListener("click", captureLive);
-  selectCapture.addEventListener("change", (e) => {
-    if (e.target.value) {
-      analyzeCapture(e.target.value);
-    }
-  });
+  if (btnCaptureLive) {
+    btnCaptureLive.addEventListener("click", () => toggleLivePolling());
+  }
 
-  chkAutoPoll.addEventListener("change", (e) => {
-    if (e.target.checked) {
-      pollTimer = setInterval(fetchTableState, 1800);
-    } else if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
-  });
+  if (btnSnapshot) {
+    btnSnapshot.addEventListener("click", captureSnapshot);
+  }
+
+  if (chkAutoPoll) {
+    chkAutoPoll.addEventListener("change", (e) => {
+      toggleLivePolling(e.target.checked);
+    });
+  }
+
+  if (selectCapture) {
+    selectCapture.addEventListener("change", (e) => {
+      if (e.target.value) {
+        if (isLivePolling) {
+          stopLivePolling();
+        }
+        analyzeCapture(e.target.value);
+      }
+    });
+  }
 
   [chkShowSeats, chkShowCards, chkShowPot].forEach(chk => {
-    chk.addEventListener("change", renderCanvasOverlay);
+    if (chk) chk.addEventListener("change", renderCanvasOverlay);
   });
 
-  btnCopyJson.addEventListener("click", () => {
-    if (currentData) {
-      navigator.clipboard.writeText(JSON.stringify(currentData, null, 2));
-      copyHint.textContent = "Copied to clipboard!";
-      setTimeout(() => { copyHint.textContent = ""; }, 2000);
-    }
-  });
+  if (btnCopyJson) {
+    btnCopyJson.addEventListener("click", () => {
+      if (currentData) {
+        navigator.clipboard.writeText(JSON.stringify(currentData, null, 2));
+        if (copyHint) {
+          copyHint.textContent = "Copied to clipboard!";
+          setTimeout(() => { copyHint.textContent = ""; }, 2000);
+        }
+      }
+    });
+  }
 }
 
 function setupTabs() {
@@ -116,74 +136,113 @@ function setupTabs() {
 }
 
 // ---------------------------------------------------------
-// API Calls
+// Live Polling & Snapshot
 // ---------------------------------------------------------
-async function fetchTableState() {
-  try {
-    const res = await fetch("/api/table_state");
-    const json = await res.json();
-    if (json.success) {
-      updateDashboard(json);
+function toggleLivePolling(forceState = null) {
+  const shouldRun = forceState !== null ? forceState : !isLivePolling;
+  if (shouldRun === isLivePolling) return;
+
+  if (shouldRun) {
+    startLivePolling();
+  } else {
+    stopLivePolling();
+  }
+}
+
+function startLivePolling() {
+  if (isLivePolling) return;
+  isLivePolling = true;
+
+  if (btnCaptureLive) btnCaptureLive.classList.add("btn-live-active");
+  if (btnLiveText) btnLiveText.textContent = "Stop Live Polling";
+  if (liveIndicator) liveIndicator.classList.remove("hidden");
+  if (chkAutoPoll) chkAutoPoll.checked = true;
+
+  liveLoop();
+}
+
+function stopLivePolling() {
+  isLivePolling = false;
+  if (liveAbortController) {
+    liveAbortController.abort();
+    liveAbortController = null;
+  }
+
+  if (btnCaptureLive) btnCaptureLive.classList.remove("btn-live-active");
+  if (btnLiveText) btnLiveText.textContent = "Start Live Polling";
+  if (liveIndicator) liveIndicator.classList.add("hidden");
+  if (chkAutoPoll) chkAutoPoll.checked = false;
+  if (fpsCounter) fpsCounter.textContent = "-- FPS";
+}
+
+async function liveLoop() {
+  fpsStartTime = performance.now();
+  frameCount = 0;
+
+  while (isLivePolling) {
+    liveAbortController = new AbortController();
+    try {
+      const res = await fetch("/api/capture_live", { signal: liveAbortController.signal });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      if (json.success && isLivePolling) {
+        updateDashboard(json);
+        frameCount++;
+
+        const now = performance.now();
+        const elapsedSec = (now - fpsStartTime) / 1000.0;
+        if (elapsedSec >= 1.0) {
+          const fps = (frameCount / elapsedSec).toFixed(1);
+          if (fpsCounter) fpsCounter.textContent = `${fps} FPS`;
+          frameCount = 0;
+          fpsStartTime = now;
+        }
+      }
+    } catch (err) {
+      if (err.name === "AbortError") {
+        break;
+      }
+      console.warn("Live poll frame dropped:", err);
+      // Wait slightly on error before retry
+      await new Promise(resolve => setTimeout(resolve, 800));
+    } finally {
+      liveAbortController = null;
     }
-  } catch (err) {
-    console.error("Failed to fetch table state:", err);
+
+    // Small yield between captures so browser renders smoothly
+    if (isLivePolling) {
+      await new Promise(resolve => setTimeout(resolve, 40));
+    }
   }
 }
 
-async function loadCapturesList() {
-  try {
-    const res = await fetch("/api/captures_list");
-    const json = await res.json();
-    selectCapture.innerHTML = '<option value="">-- Choose Screenshot --</option>';
-    (json.captures || []).forEach(c => {
-      const opt = document.createElement("option");
-      opt.value = c.filename;
-      opt.textContent = `${c.filename} (${c.size_kb} KB)`;
-      selectCapture.appendChild(opt);
-    });
-  } catch (err) {
-    console.error("Failed to load captures:", err);
-  }
-}
+async function captureSnapshot() {
+  if (btnSnapshot) btnSnapshot.disabled = true;
+  const originalHtml = btnSnapshot ? btnSnapshot.innerHTML : "";
+  if (btnSnapshot) btnSnapshot.innerHTML = '<span class="btn-icon">⏳</span> Saving...';
 
-async function analyzeCapture(filename) {
   try {
-    analysisTimeStamp.textContent = "Analyzing " + filename + "...";
-    const res = await fetch("/api/analyze_capture", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filename })
-    });
+    const res = await fetch("/api/capture_live?save=true", { method: "POST" });
     const json = await res.json();
     if (json.success) {
       updateDashboard(json);
+      await loadCapturesList();
+      if (selectCapture && json.image_name) {
+        selectCapture.value = json.image_name;
+      }
     } else {
-      alert("Analysis error: " + (json.error || "Unknown error"));
+      alert("Snapshot Error: " + (json.error || "Failed to capture snapshot"));
     }
   } catch (err) {
-    console.error("Error analyzing capture:", err);
-  }
-}
-
-async function captureLive() {
-  btnCaptureLive.disabled = true;
-  const originalText = btnCaptureLive.innerHTML;
-  btnCaptureLive.innerHTML = '<span class="btn-icon">⏳</span> Capturing...';
-  try {
-    const res = await fetch("/api/capture_live", { method: "POST" });
-    const json = await res.json();
-    if (json.success) {
-      updateDashboard(json);
-      loadCapturesList(); // refresh list
-    } else {
-      alert("Live Capture Error: " + (json.error || "Failed to capture ADB screen"));
-    }
-  } catch (err) {
-    console.error("Error capturing live:", err);
-    alert("Network or ADB error during capture");
+    console.error("Error capturing snapshot:", err);
+    alert("Network error capturing snapshot");
   } finally {
-    btnCaptureLive.disabled = false;
-    btnCaptureLive.innerHTML = originalText;
+    if (btnSnapshot) {
+      btnSnapshot.disabled = false;
+      btnSnapshot.innerHTML = originalHtml;
+    }
   }
 }
 
@@ -208,7 +267,8 @@ function updateDashboard(data) {
     currentImageTag.textContent = data.image_name;
   }
   if (state.analysis_time_sec) {
-    analysisTimeStamp.textContent = `Analyzed in ${state.analysis_time_sec}s (${state.timestamp || ""})`;
+    const capInfo = state.capture_time_ms ? ` (Cap: ${state.capture_time_ms}ms, OCR: ${state.analysis_time_sec}s [${state.capture_source || 'live'}])` : ` (${state.analysis_time_sec}s)`;
+    analysisTimeStamp.textContent = `Analyzed in ${state.analysis_time_sec}s${capInfo} - ${state.timestamp || ""}`;
   } else {
     analysisTimeStamp.textContent = state.timestamp || "Active";
   }

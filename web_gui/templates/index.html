@@ -37,18 +37,24 @@
     </div>
 
     <div class="header-actions">
-      <button class="btn btn-primary" id="btn-capture-live" title="Capture hardware screencap directly from connected phone via ADB">
-        <span class="btn-icon">⚡</span> Capture Live (ADB)
+      <div id="live-indicator" class="live-status-pill hidden" title="Real-time continuous live stream active">
+        <span class="pulse-dot"></span> LIVE (<span id="fps-counter">-- FPS</span>)
+      </div>
+      <button class="btn btn-primary" id="btn-capture-live" title="Toggle real-time continuous polling (live stream)">
+        <span class="btn-icon">⚡</span> <span id="btn-live-text">Start Live Polling</span>
+      </button>
+      <button class="btn btn-secondary" id="btn-snapshot" title="Take a single snapshot and save to captures/">
+        <span class="btn-icon">📸</span> Snapshot
       </button>
       <div class="select-wrapper">
         <select id="select-capture" title="Choose capture to view">
           <option value="">Loading captures...</option>
         </select>
       </div>
-      <label class="toggle-control" title="Periodically refresh current view">
+      <label class="toggle-control" title="Toggle continuous real-time polling">
         <input type="checkbox" id="chk-auto-poll">
         <span class="slider"></span>
-        <span class="toggle-label">Live Poll</span>
+        <span class="toggle-label">Auto Poll</span>
       </label>
     </div>
   </header>

@@ -214,74 +214,90 @@ class CardDetector:
         is_red = red_pts > black_pts
 
         # Step 2: Shape morphology on the large suit symbol (lower-right quadrant)
-        ls_x1 = int(CW * 0.32)
-        ls_y1 = int(CH * 0.35)
-        ls_x2 = CW - 1
-        ls_y2 = CH - 1
+        ls_x1 = int(CW * 0.35)
+        ls_y1 = int(CH * 0.40)
+        ls_x2 = int(CW * 0.98)
+        ls_y2 = int(CH * 0.92)
         
         ls_crop = card_body.crop((ls_x1, ls_y1, ls_x2, ls_y2)).convert("RGB")
         ls_data = ls_crop.load()
         ls_mask = Image.new("1", ls_crop.size, 0)
-        lsm = ls_mask.load()
 
         for y in range(ls_crop.height):
             for x in range(ls_crop.width):
                 r, g, b = ls_data[x, y]
                 if is_red:
                     if r > 110 and r > g + 25 and r > b + 25:
-                        lsm[x, y] = 1
+                        ls_mask.putpixel((x, y), 1)
                 else:
                     if r < 95 and g < 95 and b < 95 and abs(r - g) < 25:
-                        lsm[x, y] = 1
+                        ls_mask.putpixel((x, y), 1)
 
-        bbox = ls_mask.getbbox()
+        # Isolate largest connected component to filter border shadows and rank tails
+        clean_mask = self._get_largest_component(ls_mask)
+        bbox = clean_mask.getbbox()
         if not bbox:
-            # Fallback based on color alone
             return ("h" if is_red else "s"), 0.65
 
-        suit_glyph = ls_mask.crop(bbox)
+        suit_glyph = clean_mask.crop(bbox)
         sw, sh = suit_glyph.size
         sg_data = suit_glyph.load()
 
-        # Mass distribution
-        top_half_area = sum(sg_data[x, y] for y in range(sh // 2) for x in range(sw))
-        bot_half_area = sum(sg_data[x, y] for y in range(sh // 2, sh) for x in range(sw))
-
-        # Top apex width (measured at y = 15% of height)
-        y_top = min(max(int(sh * 0.15), 1), sh - 1)
-        top_width = sum(sg_data[x, y_top] for x in range(sw))
-
-        # Mid waist width (measured at y = 50% of height)
-        y_mid = int(sh * 0.50)
-        mid_width = sum(sg_data[x, y_mid] for x in range(sw))
-
         if is_red:
-            # Diamond is vertically symmetric (area ratio ~ 1.0);
-            # Heart has dual top lobes, deep top dip, and heavy top area (ratio > 1.25).
-            area_ratio = top_half_area / max(bot_half_area, 1)
-            # Center dip at row 1
-            top_center_dip = False
-            if sw >= 5 and sh >= 6:
-                mid_x = sw // 2
-                if sg_data[mid_x, 1] == 0 and (sg_data[mid_x // 2, 1] == 1 or sg_data[mid_x + mid_x // 2, 1] == 1):
-                    top_center_dip = True
-
-            if area_ratio > 1.25 or top_center_dip:
+            mid_x = sw // 2
+            cleft = False
+            for cy in range(1, min(4, sh)):
+                if sg_data[mid_x, cy] == 0 and (sg_data[mid_x // 2, cy] == 1 or sg_data[mid_x + mid_x // 2, cy] == 1):
+                    cleft = True
+                    break
+            top_half_area = sum(sg_data[x, y] for y in range(sh // 2) for x in range(sw))
+            bot_half_area = sum(sg_data[x, y] for y in range(sh // 2, sh) for x in range(sw))
+            ratio = top_half_area / max(bot_half_area, 1)
+            r1_w = sum(sg_data[x, min(1, sh - 1)] for x in range(sw))
+            if cleft or (r1_w / float(sw) > 0.45 and ratio > 1.35):
                 return "h", 0.99
             else:
                 return "d", 0.99
         else:
-            # Spade has sharp pointy apex at top (top_width <= 4), wide lobes at bottom;
-            # Club has rounded dome top lobe (top_width >= 6) and narrow waist between lobes.
-            if top_width <= 4 and mid_width >= top_width * 1.8:
+            r0_w = sum(sg_data[x, 0] for x in range(sw))
+            r1_w = sum(sg_data[x, min(1, sh - 1)] for x in range(sw))
+            is_spade = (r0_w <= max(2, int(sw * 0.12)) and r1_w <= max(4, int(sw * 0.22)))
+            if is_spade:
                 return "s", 0.99
             else:
                 return "c", 0.99
 
+    def _get_largest_component(self, mask: Image.Image) -> Image.Image:
+        """Keeps only the largest connected 8-connected / 4-connected blob in a binary mask."""
+        w, h = mask.size
+        visited = set()
+        best_comp = []
+        for y in range(h):
+            for x in range(w):
+                if mask.getpixel((x, y)) and (x, y) not in visited:
+                    comp = []
+                    q = [(x, y)]
+                    visited.add((x, y))
+                    while q:
+                        cx, cy = q.pop()
+                        comp.append((cx, cy))
+                        for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                            nx, ny = cx + dx, cy + dy
+                            if 0 <= nx < w and 0 <= ny < h:
+                                if (nx, ny) not in visited and mask.getpixel((nx, ny)):
+                                    visited.add((nx, ny))
+                                    q.append((nx, ny))
+                    if len(comp) > len(best_comp):
+                        best_comp = comp
+        out = Image.new("1", (w, h), 0)
+        for cx, cy in best_comp:
+            out.putpixel((cx, cy), 1)
+        return out
+
     def _classify_rank(self, card_body: Image.Image) -> Tuple[str, float]:
         """
         Classifies rank glyph from top-left of card.
-        Uses 10-detection and canonical template cross-correlation.
+        Uses resolution-independent blank row gap detection and aspect-ratio 10-detection.
         """
         CW, CH = card_body.size
         # Crop rank area in top-left
@@ -306,14 +322,21 @@ class CardDetector:
         glyph = r_mask.crop(bbox)
         gw, gh = glyph.size
 
-        # In ClubGG cards, the rank character occupies the top 11 pixels of the glyph.
-        # Below row 11 is the gap and the small suit icon.
-        char_height = min(11, gh)
-        char_glyph = glyph.crop((0, 0, gw, char_height))
+        # Find horizontal blank row gap separating the rank character from the small suit icon below it
+        gap_y = None
+        for y in range(int(gh * 0.40), gh):
+            if sum(glyph.getpixel((x, y)) for x in range(gw)) == 0:
+                gap_y = y
+                break
+
+        char_glyph = glyph.crop((0, 0, gw, gap_y if gap_y else int(gh * 0.68)))
+        c_bbox = char_glyph.getbbox()
+        if c_bbox:
+            char_glyph = char_glyph.crop(c_bbox)
         cgw, cgh = char_glyph.size
 
-        # 1. Distinctive "10" detection: 10 has two characters ("10") and is significantly wider
-        if cgw >= 9 or (cgw >= 8 and cgw >= cgh * 0.75):
+        # 1. Distinctive "10" detection: 10 has two characters ("10") with aspect ratio >= 0.78
+        if cgw >= cgh * 0.78:
             return "T", 0.98
 
         # 2. Normalize candidate glyph to 8x11 grid for template comparison
@@ -459,16 +482,16 @@ class CardDetector:
             ],
             "9": [
                 "..####..",
-                ".######.",
+                "#######.",
                 "##....##",
-                "##....##",
+                "##...###",
+                "##...###",
+                "########",
+                ".....###",
+                ".....###",
+                "##...###",
                 ".######.",
-                "..#####.",
-                "......##",
-                "......##",
-                "##....##",
-                ".######.",
-                "..####.."
+                "..###..."
             ],
             "8": [
                 "..####..",
