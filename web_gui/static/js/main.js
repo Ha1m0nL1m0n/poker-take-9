@@ -253,23 +253,13 @@ function updateDashboard(data) {
   currentData = data.state;
   const state = data.state;
 
-  // Table Pot Display Smoothing
-  let displayPot = state.total_pot;
-  if (displayPot !== null && displayPot > 0) {
-    window._lastKnownPot = displayPot;
-  } else if (window._lastKnownPot && (state.board_stage !== "preflop" || (state.community_cards && state.community_cards.length > 0))) {
-    displayPot = window._lastKnownPot;
-  } else if (state.board_stage === "preflop" && (!state.community_cards || state.community_cards.length === 0)) {
-    window._lastKnownPot = null;
-  }
-
   // Header
   headerBlinds.textContent = state.blinds || "N/A";
-  headerPot.textContent = displayPot !== null ? (typeof displayPot === "number" ? displayPot.toFixed(2) : displayPot) : "--";
+  headerPot.textContent = state.total_pot !== null ? state.total_pot : "--";
   headerStage.textContent = (state.board_stage || "PREFLOP").toUpperCase();
 
   // Table Center
-  tablePotVal.textContent = displayPot !== null ? (typeof displayPot === "number" ? displayPot.toFixed(2) : displayPot) : "0.00";
+  tablePotVal.textContent = state.total_pot !== null ? state.total_pot : "0.00";
   tableStakesVal.textContent = `${state.blinds || "Stakes N/A"} (${state.table_type || "8-max"})`;
   tableQueueVal.textContent = `Queue: ${state.waiting_players !== null ? state.waiting_players : 0}`;
   
@@ -328,36 +318,29 @@ function renderCommunityCards(cards) {
 }
 
 function renderSeats(seats, dealerSeatId) {
-  // Update seat nodes in-place to prevent DOM tearing and flicker
+  seatsRing.innerHTML = "";
+
   seats.forEach(seat => {
     const sid = seat.seat_id;
     const pos = SEAT_LAYOUT[sid] || { x: 50, y: 50 };
 
-    let seatNode = document.getElementById(`seat-hud-${sid}`);
-    if (!seatNode) {
-      seatNode = document.createElement("div");
-      seatNode.id = `seat-hud-${sid}`;
-      seatNode.className = "seat-hud";
-      seatNode.style.left = `${pos.x}%`;
-      seatNode.style.top = `${pos.y}%`;
-      seatsRing.appendChild(seatNode);
-    }
+    const seatNode = document.createElement("div");
+    seatNode.className = "seat-hud";
+    seatNode.style.left = `${pos.x}%`;
+    seatNode.style.top = `${pos.y}%`;
 
     if (!seat.is_occupied) {
-      seatNode.className = "seat-hud empty";
+      seatNode.classList.add("empty");
       seatNode.innerHTML = `<span style="font-size: 0.72rem; color: #718096;">Seat ${sid} (Empty)</span>`;
-      const oldBet = document.getElementById(`seat-bet-${sid}`);
-      if (oldBet) oldBet.remove();
+      seatsRing.appendChild(seatNode);
       return;
     }
 
-    let hudClass = "seat-hud";
     if (!seat.is_in_hand) {
-      hudClass += " folded";
+      seatNode.classList.add("folded");
     } else {
-      hudClass += " active-hand";
+      seatNode.classList.add("active-hand");
     }
-    seatNode.className = hudClass;
 
     // Top Row: Pos badge + VPIP
     const isBtn = sid === dealerSeatId || (seat.position && seat.position.toUpperCase() === "BTN");
@@ -406,23 +389,19 @@ function renderSeats(seats, dealerSeatId) {
       ${cardsHtml}
     `;
 
+    seatsRing.appendChild(seatNode);
+
     // Render bet chip on felt if player has a current bet
-    let betBadge = document.getElementById(`seat-bet-${sid}`);
     if (seat.current_bet && seat.current_bet > 0) {
-      if (!betBadge) {
-        betBadge = document.createElement("div");
-        betBadge.id = `seat-bet-${sid}`;
-        betBadge.className = "felt-bet-badge";
-        const dx = (50 - pos.x) * 0.45;
-        const dy = (50 - pos.y) * 0.45;
-        betBadge.style.left = `${pos.x + dx}%`;
-        betBadge.style.top = `${pos.y + dy}%`;
-        seatsRing.appendChild(betBadge);
-      }
+      const betBadge = document.createElement("div");
+      betBadge.className = "felt-bet-badge";
+      // Offset towards table center
+      const dx = (50 - pos.x) * 0.45;
+      const dy = (50 - pos.y) * 0.45;
+      betBadge.style.left = `${pos.x + dx}%`;
+      betBadge.style.top = `${pos.y + dy}%`;
       betBadge.innerHTML = `<img src="/static/chips/chip_red.png" alt="Chip"> <span>${seat.current_bet}</span>`;
-      betBadge.style.display = "flex";
-    } else if (betBadge) {
-      betBadge.remove();
+      seatsRing.appendChild(betBadge);
     }
   });
 }
