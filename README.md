@@ -200,5 +200,58 @@ Extracts real-time poker table state from ClubGG screenshots and live device scr
 ===========================================================================
 ```
 
+---
+
+## 4. Card Rank & Suit Recognition (`card_detector.py`)
+
+High-integrity card rank and suit detector for Texas Hold'em community boards and player showdown hands:
+- **Zero-Duplicate Deck Invariant**: Validates single 52-card deck composition (flags duplicates immediately).
+- **2-Tier Suit Classifier**:
+  - Color verification: Red (Hearts `h`, Diamonds `d`) vs Black (Spades `s`, Clubs `c`).
+  - Morphological geometry: Diamond (symmetric rhomboid) vs Heart (dual lobes + center notch + top-heavy mass); Spade (sharp top apex) vs Club (rounded dome + waist indentation).
+- **Template & Structural Rank Recognition**: 13 canonical 8x11 normalized rank templates (`A, K, Q, J, T, 9, 8, 7, 6, 5, 4, 3, 2`).
+- **Board Stage Integrity**: Validates board card count: 0 (Preflop), 3 (Flop), 4 (Turn), 5 (River).
+
+### Running Standalone Card Detection
+```powershell
+python card_detector.py -i captures/event_203_audio.png
+```
+
+Output:
+```text
+============================================================
+           COMMUNITY CARDS DETECTION REPORT
+============================================================
+ Board Stage   : RIVER (5 cards)
+ Health Status : HEALTHY
+ Valid Stage   : True
+ Has Duplicates: False
+------------------------------------------------------------
+ Card 1: 5c   | Rank: 5  | Suit: Clubs (C)      | Conf: 84.5%
+ Card 2: 2s   | Rank: 2  | Suit: Spades (S)     | Conf: 85.1%
+ Card 3: 3c   | Rank: 3  | Suit: Clubs (C)      | Conf: 82.3%
+ Card 4: Qd   | Rank: Q  | Suit: Diamonds (D)   | Conf: 82.1%
+ Card 5: Tc   | Rank: T  | Suit: Clubs (C)      | Conf: 98.5%
+============================================================
+```
+
+---
+
+## 5. Interactive Flask Web GUI (`web_gui/app.py`)
+
+A full interactive web dashboard running on `http://127.0.0.1:5000`:
+- **Virtual Poker Table**: Real-time oval green felt table displaying all 8 seats, player avatars, stack sizes, VPIP badges, position tags (`BTN`, `SB`, `BB`, etc.), action pills (`Check`, `Call`, `Bet`, `Raise`), and bet chips on felt.
+- **Card Pack Asset Rendering**: Community cards and player showdown hands are rendered using pixel-art playing card sprites sliced from `Poker cards 1.3.zip`.
+- **Detection Overlay Canvas**: Displays the source screenshot with toggleable bounding boxes for seats, cards, pot, and dealer button.
+- **Data Integrity Inspector**: Verifies deck uniqueness, board stage validity, and confidence metrics.
+- **Live ADB Capture & History Browser**: One-click live capture from connected phone via ADB, or browse historical captures with instant analysis.
+
+### Launching the Web GUI
+```powershell
+python web_gui/app.py
+```
+Open **[http://127.0.0.1:5000](http://127.0.0.1:5000)** in your web browser.
+
+
 
 

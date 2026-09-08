@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClubGG Table HUD & Card Recognition Visualizer</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Header Bar -->
+  <header class="app-header">
+    <div class="logo-group">
+      <span class="poker-suit-icon">♠</span>
+      <h1>ClubGG Table HUD & Card Visualizer</h1>
+      <span class="version-tag">v1.3</span>
+    </div>
+
+    <div class="quick-metrics">
+      <div class="metric-chip">
+        <span class="m-label">Blinds</span>
+        <span class="m-val" id="header-blinds">--/--</span>
+      </div>
+      <div class="metric-chip">
+        <span class="m-label">Total Pot</span>
+        <span class="m-val highlight" id="header-pot">--</span>
+      </div>
+      <div class="metric-chip">
+        <span class="m-label">Stage</span>
+        <span class="m-val badge-stage" id="header-stage">PREFLOP</span>
+      </div>
+      <div class="metric-chip">
+        <span class="m-label">Integrity</span>
+        <span class="m-val badge-integrity" id="header-integrity">HEALTHY</span>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <button class="btn btn-primary" id="btn-capture-live" title="Capture hardware screencap directly from connected phone via ADB">
+        <span class="btn-icon">⚡</span> Capture Live (ADB)
+      </button>
+      <div class="select-wrapper">
+        <select id="select-capture" title="Choose capture to view">
+          <option value="">Loading captures...</option>
+        </select>
+      </div>
+      <label class="toggle-control" title="Periodically refresh current view">
+        <input type="checkbox" id="chk-auto-poll">
+        <span class="slider"></span>
+        <span class="toggle-label">Live Poll</span>
+      </label>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <main class="dashboard-grid">
+    <!-- Left Panel: Virtual Poker Table Visualizer -->
+    <section class="poker-table-container">
+      <div class="table-card-wrapper">
+        <div class="poker-table">
+          <!-- Table Felt Center -->
+          <div class="table-center">
+            <div class="pot-container">
+              <div class="pot-chips">
+                <img src="/static/chips/chip_red.png" class="chip-stack-icon" alt="Chips">
+              </div>
+              <div class="pot-details">
+                <span class="pot-label">TOTAL POT</span>
+                <span class="pot-amount" id="table-pot-val">0.00</span>
+              </div>
+            </div>
+
+            <!-- Community Cards -->
+            <div class="community-board" id="community-board">
+              <div class="card-slot empty" id="card-slot-0"><span class="slot-placeholder">1</span></div>
+              <div class="card-slot empty" id="card-slot-1"><span class="slot-placeholder">2</span></div>
+              <div class="card-slot empty" id="card-slot-2"><span class="slot-placeholder">3</span></div>
+              <div class="card-slot empty" id="card-slot-3"><span class="slot-placeholder">4</span></div>
+              <div class="card-slot empty" id="card-slot-4"><span class="slot-placeholder">5</span></div>
+            </div>
+
+            <div class="board-info-bar">
+              <span class="table-stakes" id="table-stakes-val">0.25/0.50 NLH</span>
+              <span class="waiting-queue" id="table-queue-val">Queue: 0</span>
+            </div>
+          </div>
+
+          <!-- 8 Seats Placed Clockwise -->
+          <div class="seats-ring" id="seats-ring">
+            <!-- Dynamically populated via main.js -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Legend & Table Info -->
+      <footer class="table-footer">
+        <div class="legend-item"><span class="dot active"></span> Active in Hand</div>
+        <div class="legend-item"><span class="dot folded"></span> Folded</div>
+        <div class="legend-item"><span class="dot btn"></span> Dealer Button (BTN)</div>
+        <div class="legend-item"><span class="badge-vpip-legend">VPIP%</span> Voluntarily Put $ In Pot</div>
+        <div class="time-stamp" id="analysis-time-stamp">Ready</div>
+      </footer>
+    </section>
+
+    <!-- Right Panel: Inspection Tabs -->
+    <section class="inspector-container">
+      <div class="inspector-tabs">
+        <button class="tab-btn active" data-tab="tab-overlay">Detection Overlay</button>
+        <button class="tab-btn" data-tab="tab-cards">Card Recognition & Integrity</button>
+        <button class="tab-btn" data-tab="tab-json">Raw JSON State</button>
+      </div>
+
+      <!-- Tab 1: Detection Overlay Canvas -->
+      <div class="tab-content active" id="tab-overlay">
+        <div class="overlay-toolbar">
+          <label class="chk-label">
+            <input type="checkbox" id="chk-show-seats" checked> Show Seats
+          </label>
+          <label class="chk-label">
+            <input type="checkbox" id="chk-show-cards" checked> Show Cards
+          </label>
+          <label class="chk-label">
+            <input type="checkbox" id="chk-show-pot" checked> Show Pot & Blinds
+          </label>
+          <span class="image-name-tag" id="current-image-tag">No Image Loaded</span>
+        </div>
+        <div class="canvas-viewport">
+          <canvas id="overlay-canvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Tab 2: Card Integrity Inspector -->
+      <div class="tab-content" id="tab-cards">
+        <div class="integrity-card" id="integrity-card">
+          <div class="integrity-header">
+            <h3>Deck Integrity & Texas Hold'em Invariants</h3>
+            <span class="health-badge healthy" id="health-badge">HEALTHY</span>
+          </div>
+          <div class="integrity-grid">
+            <div class="int-stat">
+              <span class="label">Board Stage</span>
+              <span class="val" id="int-stage">PREFLOP</span>
+            </div>
+            <div class="int-stat">
+              <span class="label">Cards on Board</span>
+              <span class="val" id="int-card-count">0</span>
+            </div>
+            <div class="int-stat">
+              <span class="label">Duplicate Check</span>
+              <span class="val success" id="int-duplicate-check">0 Duplicates (Clean)</span>
+            </div>
+            <div class="int-stat">
+              <span class="label">Stage Rule</span>
+              <span class="val success" id="int-stage-rule">Valid (0/3/4/5 cards)</span>
+            </div>
+          </div>
+        </div>
+
+        <h4 class="section-subhead">Detected Cards Breakdown</h4>
+        <div class="detected-cards-list" id="detected-cards-list">
+          <p class="empty-state">No cards currently on board (Preflop).</p>
+        </div>
+
+        <h4 class="section-subhead" style="margin-top: 1.5rem;">Card Asset Pack Library (52 Cards)</h4>
+        <div class="card-pack-gallery" id="card-pack-gallery">
+          <!-- Populated with all cards -->
+        </div>
+      </div>
+
+      <!-- Tab 3: Raw JSON Inspector -->
+      <div class="tab-content" id="tab-json">
+        <div class="json-toolbar">
+          <button class="btn btn-secondary btn-sm" id="btn-copy-json">Copy JSON</button>
+          <span class="copy-hint" id="copy-hint"></span>
+        </div>
+        <pre class="json-viewer" id="json-viewer">{}</pre>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/js/main.js"></script>
+</body>
+</html>

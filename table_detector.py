@@ -151,6 +151,8 @@ class PlayerSeat:
     vpip: Optional[int] = None
     action: Optional[str] = None
     current_bet: Optional[float] = None
+    cards: List[str] = field(default_factory=list)
+    cards_detail: List[Dict[str, Any]] = field(default_factory=list)
 
 @dataclass
 class PokerTableState:
@@ -161,6 +163,8 @@ class PokerTableState:
     total_pot: Optional[float] = None
     board_stage: str = "preflop"
     community_cards: List[str] = field(default_factory=list)
+    cards_detail: List[Dict[str, Any]] = field(default_factory=list)
+    board_integrity: Optional[Dict[str, Any]] = None
     dealer_seat: Optional[int] = None
     total_seats: int = 8
     occupied_seats: int = 0
@@ -173,19 +177,24 @@ class PokerTableState:
         return asdict(self)
 
 
+
 # ---------------------------------------------------------
 # OCR & Vision Processing Engine
 # ---------------------------------------------------------
+from card_detector import CardDetector
+
 class ClubGGTableDetector:
     def __init__(self, temp_dir="scratch"):
         self.temp_dir = temp_dir
         os.makedirs(self.temp_dir, exist_ok=True)
+        self.card_detector = CardDetector()
         self.ocr_engine = None
         if WINRT_OCR_AVAILABLE:
             try:
                 self.ocr_engine = win_ocr.OcrEngine.try_create_from_user_profile_languages()
             except Exception as e:
                 print(f"[WARN] Failed to initialize Windows OCR: {e}")
+
 
     async def _run_winrt_ocr(self, img: Image.Image) -> List[Tuple[float, float, float, float, str]]:
         """Runs Windows OCR on image, returning list of (norm_x, norm_y, norm_w, norm_h, text)."""
@@ -265,10 +274,12 @@ class ClubGGTableDetector:
         # 2. Parse Total Pot
         table_state.total_pot = self._extract_total_pot(ocr_words)
 
-        # 3. Detect Community Cards & Board Stage
-        cards, stage = self._detect_community_cards(img)
+        # 3. Detect Community Cards & Board Stage with CardDetector
+        cards, stage, cards_detail, board_integrity = self._detect_community_cards(img)
         table_state.community_cards = cards
         table_state.board_stage = stage
+        table_state.cards_detail = cards_detail
+        table_state.board_integrity = board_integrity
 
         # 4. Detect Waiting Queue Count
         table_state.waiting_players = self._extract_waiting_queue(ocr_words)
@@ -308,17 +319,15 @@ class ClubGGTableDetector:
     def _extract_total_pot(self, words) -> Optional[float]:
         # Search around center pot area (norm_y ~ 0.40 .. 0.50)
         pot_candidates = []
-        is_after_pot_label = False
         for nx, ny, _, _, text in words:
             if 0.40 <= ny <= 0.52 and 0.35 <= nx <= 0.65:
                 if "pot" in text.lower():
-                    is_after_pot_label = True
                     continue
-                # Extract float
-                num_str = re.sub(r'[^\d\.]', '', text)
-                if num_str and num_str.count('.') <= 1:
+                # Extract float safely
+                m = re.search(r'\d+(?:\.\d+)?', text)
+                if m:
                     try:
-                        val = float(num_str)
+                        val = float(m.group(0))
                         if 0.1 <= val <= 1000000:
                             pot_candidates.append(val)
                     except ValueError:
@@ -335,29 +344,14 @@ class ClubGGTableDetector:
                     return int(text)
         return None
 
-    def _detect_community_cards(self, img: Image.Image) -> Tuple[List[str], str]:
-        w, h = img.size
-        bx1, by1, bx2, by2 = COMMUNITY_CARDS_BOX
-        box = (int(bx1 * w), int(by1 * h), int(bx2 * w), int(by2 * h))
-        crop = img.crop(box)
-        
-        # Check white pixel ratio across 5 potential card slots
-        slot_w = crop.width // 5
-        detected_cards = 0
-        
-        for i in range(5):
-            slot = crop.crop((i * slot_w, 0, (i + 1) * slot_w, crop.height))
-            pixels = [slot.getpixel((x, y)) for y in range(slot.height) for x in range(slot.width)]
-            white_px = sum(1 for p in pixels if p[0] > 195 and p[1] > 195 and p[2] > 195)
-            if (white_px / len(pixels)) > 0.25:
-                detected_cards += 1
+    def _detect_community_cards(self, img: Image.Image) -> Tuple[List[str], str, List[Dict[str, Any]], Dict[str, Any]]:
+        """Extracts high-integrity community card ranks and suits via CardDetector."""
+        report = self.card_detector.detect_community_cards(img)
+        card_names = [c.card for c in report.cards]
+        cards_detail = [c.to_dict() for c in report.cards]
+        stage = report.stage.lower()
+        return card_names, stage, cards_detail, report.to_dict()
 
-        stage_map = {0: "preflop", 3: "flop", 4: "turn", 5: "river"}
-        stage = stage_map.get(detected_cards, "preflop" if detected_cards < 3 else "river")
-        
-        # Card slots
-        card_names = [f"BoardCard_{i+1}" for i in range(detected_cards)]
-        return card_names, stage
 
     def _detect_dealer_button(self, img: Image.Image) -> Optional[int]:
         """Finds gold circular Dealer Button 'D' and maps it to closest seat."""
@@ -494,8 +488,13 @@ class ClubGGTableDetector:
             tl = text.lower()
             if any(act in tl for act in action_keywords):
                 continue
-            if re.sub(r'[^\d\.]', '', text) and seat.stack and abs(float(re.sub(r'[^\d\.]', '', text) or 0) - seat.stack) < 0.01:
-                continue
+            m_f = re.search(r'\d+(?:\.\d+)?', text)
+            if m_f and seat.stack:
+                try:
+                    if abs(float(m_f.group(0)) - seat.stack) < 0.01:
+                        continue
+                except ValueError:
+                    pass
             if text.isdigit() and seat.vpip and int(text) == seat.vpip:
                 continue
             if len(text) >= 2 and not text.isdigit():
@@ -513,16 +512,17 @@ class ClubGGTableDetector:
         bet_x1, bet_y1, bet_x2, bet_y2 = seat_cfg["bet_box"]
         for nx, ny, _, _, text in words:
             if bet_x1 <= nx <= bet_x2 and bet_y1 <= ny <= bet_y2:
-                clean = re.sub(r'[^\d\.]', '', text)
-                if clean and clean.count('.') <= 1:
+                m_bet = re.search(r'\d+(?:\.\d+)?', text)
+                if m_bet:
                     try:
-                        b_val = float(clean)
+                        b_val = float(m_bet.group(0))
                         if 0.01 <= b_val <= 100000:
                             seat.current_bet = b_val
                     except ValueError:
                         pass
 
         return seat
+
 
     def _assign_positions(self, seats: List[PlayerSeat], dealer_seat_id: Optional[int]):
         """Calculates poker positions (BTN, SB, BB, UTG, MP, CO) relative to dealer seat."""
@@ -599,7 +599,10 @@ def main():
     print(f" Table Type       : {state.table_type} ({state.game_type})")
     print(f" Blinds           : {state.blinds or 'N/A'}")
     print(f" Board Stage      : {state.board_stage.upper()} ({len(state.community_cards)} cards)")
+    if state.community_cards:
+        print(f" Community Cards  : {' '.join(state.community_cards)}")
     print(f" Total Pot        : {state.total_pot if state.total_pot is not None else 'N/A'}")
+
     print(f" Dealer Seat      : Seat {state.dealer_seat} (BTN)")
     print(f" Seated Players   : {state.occupied_seats} / {state.total_seats}")
     print(f" Active In Hand   : {state.active_players_in_hand}")

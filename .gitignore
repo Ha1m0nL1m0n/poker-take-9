@@ -8,6 +8,11 @@ captures/
 *.png
 *.jpg
 *.jpeg
+!web_gui/static/**/*.png
+
+# Virtual environment & archives
+.venv/
+*.zip
 
 # Test session recordings and generated logs
 *.json
@@ -18,4 +23,5 @@ scratch/
 scratch_test.py
 .tmp.*
 .tempmediaStorage/
+
 
