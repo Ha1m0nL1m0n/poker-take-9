@@ -464,16 +464,34 @@ def monitor_and_record(serial, target_package="com.nsus.clubgg", output_file="ap
     def analyze_table_async(img_path, ev_record):
         if not table_detector or not img_path:
             return
-        for _ in range(25):
+        # Wait up to 1.5s for capture file (especially delayed frames) to be completely written
+        for _ in range(35):
             if os.path.exists(img_path) and os.path.getsize(img_path) > 1000:
                 break
             time.sleep(0.04)
         try:
             t_state = table_detector.detect_table_state(img_path)
-            ev_record["table_state"] = t_state.to_dict()
+            state_dict = t_state.to_dict()
+            ev_record["table_state"] = state_dict
             save_json_file()
             pot_str = f"{t_state.total_pot:.2f}" if t_state.total_pot is not None else "N/A"
             print(f"              ♠️ TABLE : {t_state.occupied_seats}/{t_state.total_seats} players | Pot: {pot_str} | Board: {t_state.board_stage.upper()} | In-Hand: {t_state.active_players_in_hand}")
+
+            # Notify Web GUI if running
+            try:
+                import urllib.request
+                payload = json.dumps({
+                    "table_state": state_dict,
+                    "image_name": os.path.basename(img_path)
+                }).encode("utf-8")
+                req = urllib.request.Request(
+                    "http://127.0.0.1:5000/api/event_update",
+                    data=payload,
+                    headers={"Content-Type": "application/json"}
+                )
+                urllib.request.urlopen(req, timeout=0.25)
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -592,8 +610,10 @@ def monitor_and_record(serial, target_package="com.nsus.clubgg", output_file="ap
                         }
                         recorded_events.append(event_record)
                         save_json_file()
-                        if table_detector and ev_file:
-                            threading.Thread(target=analyze_table_async, args=(ev_file, event_record), daemon=True).start()
+                        if table_detector:
+                            target_img = del_file if del_file else ev_file
+                            if target_img:
+                                threading.Thread(target=analyze_table_async, args=(target_img, event_record), daemon=True).start()
 
             # -------------------------------------------------------------
             # B. Process Audio Signal Power Bursts (Game Sound Effects)
@@ -653,8 +673,10 @@ def monitor_and_record(serial, target_package="com.nsus.clubgg", output_file="ap
                             }
                             recorded_events.append(event_record)
                             save_json_file()
-                            if table_detector and ev_file:
-                                threading.Thread(target=analyze_table_async, args=(ev_file, event_record), daemon=True).start()
+                            if table_detector:
+                                target_img = del_file if del_file else ev_file
+                                if target_img:
+                                    threading.Thread(target=analyze_table_async, args=(target_img, event_record), daemon=True).start()
 
             # -------------------------------------------------------------
             # C. Process Standard AudioTrack State Changes (Non-Unity Apps)
@@ -698,8 +720,10 @@ def monitor_and_record(serial, target_package="com.nsus.clubgg", output_file="ap
                             }
                             recorded_events.append(event_record)
                             save_json_file()
-                            if table_detector and ev_file:
-                                threading.Thread(target=analyze_table_async, args=(ev_file, event_record), daemon=True).start()
+                            if table_detector:
+                                target_img = del_file if del_file else ev_file
+                                if target_img:
+                                    threading.Thread(target=analyze_table_async, args=(target_img, event_record), daemon=True).start()
 
 
             # Detect audio track stop

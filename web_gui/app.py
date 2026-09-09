@@ -13,6 +13,7 @@ Provides real-time interactive visualization of:
 """
 
 import glob
+import json
 import os
 import re
 import subprocess
@@ -37,8 +38,10 @@ card_detector = CardDetector()
 # Cache latest detection state
 latest_state: Dict[str, Any] = {}
 latest_image_path: Optional[str] = None
+last_events_mtime: float = 0.0
 
 CAPTURES_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "captures"))
+EVENTS_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app_events.json"))
 
 # Fast hardware-accelerated scrcpy capture instance
 capture_mgr: Optional[CaptureManager] = None
@@ -90,10 +93,30 @@ def index():
 
 @app.route("/api/table_state")
 def get_table_state():
-    """Returns the current table state JSON."""
-    global latest_state, latest_image_path
+    """Returns the current table state JSON, auto-syncing with sound-triggered events."""
+    global latest_state, latest_image_path, last_events_mtime
+
+    # 1. Sync from app_events.json if updated by monitor_app_events.py
+    if os.path.exists(EVENTS_FILE):
+        try:
+            mtime = os.path.getmtime(EVENTS_FILE)
+            if mtime > last_events_mtime:
+                last_events_mtime = mtime
+                with open(EVENTS_FILE, "r", encoding="utf-8") as f:
+                    ev_data = json.load(f)
+                events = ev_data.get("events", [])
+                for ev in reversed(events):
+                    if "table_state" in ev and ev["table_state"]:
+                        latest_state = ev["table_state"]
+                        shot = ev.get("screenshot_delayed") or ev.get("screenshot_event")
+                        if shot:
+                            latest_image_path = os.path.basename(shot)
+                        break
+        except Exception:
+            pass
+
+    # 2. Fallback to latest capture on startup if no state yet
     if not latest_state:
-        # Load default capture on startup
         default_cap = get_default_capture()
         if default_cap and os.path.exists(default_cap):
             latest_image_path = os.path.basename(default_cap)
@@ -106,6 +129,19 @@ def get_table_state():
         "image_url": f"/captures/{latest_image_path}" if latest_image_path else None,
         "state": latest_state
     })
+
+
+@app.route("/api/event_update", methods=["POST"])
+def event_update():
+    """Endpoint for monitor_app_events.py to push real-time sound-triggered updates."""
+    global latest_state, latest_image_path
+    data = request.get_json() or {}
+    if "table_state" in data:
+        latest_state = data["table_state"]
+        if "image_name" in data:
+            latest_image_path = data["image_name"]
+        return jsonify({"success": True})
+    return jsonify({"success": False, "error": "No table_state provided"}), 400
 
 
 @app.route("/api/captures_list")

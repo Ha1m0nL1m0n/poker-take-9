@@ -136,8 +136,24 @@ function setupTabs() {
 }
 
 // ---------------------------------------------------------
-// Live Polling & Snapshot
+// Live State Sync & Snapshot
 // ---------------------------------------------------------
+async function fetchTableState() {
+  try {
+    const res = await fetch("/api/table_state");
+    if (!res.ok) return;
+    const json = await res.json();
+    if (json.success && json.state) {
+      const stateKey = JSON.stringify(json.state);
+      if (!currentData || stateKey !== JSON.stringify(currentData)) {
+        updateDashboard(json);
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to fetch table state:", err);
+  }
+}
+
 function toggleLivePolling(forceState = null) {
   const shouldRun = forceState !== null ? forceState : !isLivePolling;
   if (shouldRun === isLivePolling) return;
@@ -154,7 +170,7 @@ function startLivePolling() {
   isLivePolling = true;
 
   if (btnCaptureLive) btnCaptureLive.classList.add("btn-live-active");
-  if (btnLiveText) btnLiveText.textContent = "Stop Live Polling";
+  if (btnLiveText) btnLiveText.textContent = "Stop Live Sync";
   if (liveIndicator) liveIndicator.classList.remove("hidden");
   if (chkAutoPoll) chkAutoPoll.checked = true;
 
@@ -169,7 +185,7 @@ function stopLivePolling() {
   }
 
   if (btnCaptureLive) btnCaptureLive.classList.remove("btn-live-active");
-  if (btnLiveText) btnLiveText.textContent = "Start Live Polling";
+  if (btnLiveText) btnLiveText.textContent = "Start Live Sync";
   if (liveIndicator) liveIndicator.classList.add("hidden");
   if (chkAutoPoll) chkAutoPoll.checked = false;
   if (fpsCounter) fpsCounter.textContent = "-- FPS";
@@ -182,20 +198,23 @@ async function liveLoop() {
   while (isLivePolling) {
     liveAbortController = new AbortController();
     try {
-      const res = await fetch("/api/capture_live", { signal: liveAbortController.signal });
+      const res = await fetch("/api/table_state", { signal: liveAbortController.signal });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
       const json = await res.json();
-      if (json.success && isLivePolling) {
-        updateDashboard(json);
+      if (json.success && isLivePolling && json.state) {
+        const stateKey = JSON.stringify(json.state);
+        if (!currentData || stateKey !== JSON.stringify(currentData)) {
+          updateDashboard(json);
+        }
         frameCount++;
 
         const now = performance.now();
         const elapsedSec = (now - fpsStartTime) / 1000.0;
         if (elapsedSec >= 1.0) {
           const fps = (frameCount / elapsedSec).toFixed(1);
-          if (fpsCounter) fpsCounter.textContent = `${fps} FPS`;
+          if (fpsCounter) fpsCounter.textContent = `${fps} Hz`;
           frameCount = 0;
           fpsStartTime = now;
         }
@@ -204,16 +223,14 @@ async function liveLoop() {
       if (err.name === "AbortError") {
         break;
       }
-      console.warn("Live poll frame dropped:", err);
-      // Wait slightly on error before retry
-      await new Promise(resolve => setTimeout(resolve, 800));
+      console.warn("Live sync dropped:", err);
+      await new Promise(resolve => setTimeout(resolve, 1000));
     } finally {
       liveAbortController = null;
     }
 
-    // Small yield between captures so browser renders smoothly
     if (isLivePolling) {
-      await new Promise(resolve => setTimeout(resolve, 40));
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
 }
@@ -245,6 +262,11 @@ async function captureSnapshot() {
     }
   }
 }
+
+// Global window bindings for resilient inline HTML handlers
+window.toggleLivePolling = toggleLivePolling;
+window.captureSnapshot = captureSnapshot;
+window.fetchTableState = fetchTableState;
 
 // ---------------------------------------------------------
 // Dashboard Rendering
