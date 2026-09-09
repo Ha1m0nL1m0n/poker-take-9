@@ -52,8 +52,8 @@ SEATS_8MAX = [
         "name": "Seat 1 (Top-Left)",
         "box": (0.00, 0.25, 0.25, 0.36),
         "card_box": (0.02, 0.26, 0.17, 0.31),
-        "name_box": (0.03, 0.300, 0.20, 0.328),
-        "stack_box": (0.03, 0.328, 0.20, 0.355),
+        "name_box": (0.055, 0.302, 0.210, 0.330),
+        "stack_box": (0.055, 0.330, 0.210, 0.355),
         "vpip_box": (0.00, 0.28, 0.08, 0.33),
         "bet_box": (0.18, 0.32, 0.32, 0.38),
     },
@@ -62,8 +62,8 @@ SEATS_8MAX = [
         "name": "Seat 2 (Top-Center)",
         "box": (0.38, 0.16, 0.62, 0.27),
         "card_box": (0.42, 0.17, 0.57, 0.22),
-        "name_box": (0.40, 0.210, 0.60, 0.233),
-        "stack_box": (0.40, 0.233, 0.60, 0.258),
+        "name_box": (0.440, 0.210, 0.600, 0.235),
+        "stack_box": (0.440, 0.235, 0.600, 0.258),
         "vpip_box": (0.36, 0.19, 0.44, 0.24),
         "bet_box": (0.42, 0.26, 0.58, 0.31),
     },
@@ -72,8 +72,8 @@ SEATS_8MAX = [
         "name": "Seat 3 (Top-Right)",
         "box": (0.75, 0.25, 1.00, 0.36),
         "card_box": (0.82, 0.26, 0.97, 0.31),
-        "name_box": (0.80, 0.300, 0.98, 0.328),
-        "stack_box": (0.80, 0.328, 0.98, 0.355),
+        "name_box": (0.835, 0.302, 0.990, 0.330),
+        "stack_box": (0.835, 0.330, 0.990, 0.355),
         "vpip_box": (0.76, 0.28, 0.84, 0.33),
         "bet_box": (0.68, 0.32, 0.82, 0.38),
     },
@@ -82,8 +82,8 @@ SEATS_8MAX = [
         "name": "Seat 4 (Mid-Right)",
         "box": (0.75, 0.36, 1.00, 0.47),
         "card_box": (0.82, 0.37, 0.97, 0.42),
-        "name_box": (0.80, 0.410, 0.98, 0.438),
-        "stack_box": (0.80, 0.438, 0.98, 0.465),
+        "name_box": (0.835, 0.410, 0.990, 0.440),
+        "stack_box": (0.835, 0.440, 0.990, 0.465),
         "vpip_box": (0.76, 0.39, 0.84, 0.44),
         "bet_box": (0.68, 0.40, 0.82, 0.47),
     },
@@ -92,8 +92,8 @@ SEATS_8MAX = [
         "name": "Seat 5 (Bottom-Right)",
         "box": (0.74, 0.56, 1.00, 0.68),
         "card_box": (0.81, 0.57, 0.96, 0.62),
-        "name_box": (0.78, 0.620, 0.98, 0.652),
-        "stack_box": (0.78, 0.652, 0.98, 0.678),
+        "name_box": (0.820, 0.625, 0.985, 0.655),
+        "stack_box": (0.820, 0.655, 0.985, 0.680),
         "vpip_box": (0.75, 0.60, 0.83, 0.65),
         "bet_box": (0.66, 0.64, 0.80, 0.72),
     },
@@ -102,8 +102,8 @@ SEATS_8MAX = [
         "name": "Seat 6 (Bottom-Left)",
         "box": (0.03, 0.73, 0.35, 0.86),
         "card_box": (0.06, 0.74, 0.26, 0.81),
-        "name_box": (0.06, 0.800, 0.26, 0.828),
-        "stack_box": (0.06, 0.828, 0.26, 0.855),
+        "name_box": (0.100, 0.805, 0.260, 0.830),
+        "stack_box": (0.100, 0.830, 0.260, 0.855),
         "vpip_box": (0.02, 0.77, 0.12, 0.82),
         "bet_box": (0.32, 0.74, 0.48, 0.81),
     },
@@ -112,8 +112,8 @@ SEATS_8MAX = [
         "name": "Seat 7 (Lower-Mid-Left)",
         "box": (0.00, 0.56, 0.26, 0.68),
         "card_box": (0.02, 0.57, 0.19, 0.63),
-        "name_box": (0.02, 0.620, 0.22, 0.655),
-        "stack_box": (0.02, 0.655, 0.22, 0.680),
+        "name_box": (0.055, 0.625, 0.220, 0.655),
+        "stack_box": (0.055, 0.655, 0.220, 0.680),
         "vpip_box": (0.00, 0.60, 0.08, 0.65),
         "bet_box": (0.20, 0.64, 0.34, 0.72),
     },
@@ -122,8 +122,8 @@ SEATS_8MAX = [
         "name": "Seat 8 (Mid-Left)",
         "box": (0.00, 0.36, 0.26, 0.47),
         "card_box": (0.02, 0.37, 0.17, 0.42),
-        "name_box": (0.02, 0.410, 0.22, 0.438),
-        "stack_box": (0.02, 0.438, 0.22, 0.465),
+        "name_box": (0.055, 0.420, 0.220, 0.445),
+        "stack_box": (0.055, 0.445, 0.220, 0.468),
         "vpip_box": (0.00, 0.39, 0.08, 0.44),
         "bet_box": (0.18, 0.40, 0.32, 0.47),
     }
@@ -283,15 +283,7 @@ class ClubGGTableDetector:
         if img.mode != "RGB":
             img = img.convert("RGB")
         w, h = img.size
-
-        # Upscale for OCR if small
-        scale = 2.0 if w < 600 else 1.0
-        if scale > 1.0:
-            ocr_img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
-        else:
-            ocr_img = img
-
-        ocr_words = self.run_ocr(ocr_img)
+        ocr_words = self.run_ocr(img)
 
         table_state = PokerTableState()
 
@@ -356,13 +348,13 @@ class ClubGGTableDetector:
 
         # Username Smoothing: retain known usernames for occupied seats across frames
         for seat in seats:
-            if seat.is_occupied and seat.username:
-                self._seat_usernames[seat.seat_id] = seat.username
-            elif seat.is_occupied and not seat.username:
-                if seat.seat_id in self._seat_usernames:
-                    seat.username = self._seat_usernames[seat.seat_id]
-            elif not seat.is_occupied:
+            if not seat.is_occupied:
                 self._seat_usernames.pop(seat.seat_id, None)
+                self._seat_stacks.pop(seat.seat_id, None)
+            elif seat.username:
+                self._seat_usernames[seat.seat_id] = seat.username
+            elif seat.seat_id in self._seat_usernames:
+                seat.username = self._seat_usernames[seat.seat_id]
 
         table_state.seats = seats
         table_state.occupied_seats = sum(1 for s in seats if s.is_occupied)
@@ -521,6 +513,31 @@ class ClubGGTableDetector:
 
         return nearest_seat
 
+    def _clean_player_username(self, raw: str) -> Optional[str]:
+        """Cleans and validates a candidate poker username, stripping showdown equity % and badges."""
+        if not raw:
+            return None
+        s = raw.strip()
+        # Strip leading showdown equity / badge like '(100 ' or '100% ' or '100 '
+        s = re.sub(r'^\(?\d+\%?\)?\s+', '', s)
+        # Strip trailing showdown equity / badge like ' 100%' or ' 100'
+        s = re.sub(r'\s+\(?\d+\%?\)?$', '', s)
+        # Strip non-alphanumeric punctuation at boundaries
+        s = re.sub(r'^[^\w]+|[^\w]+$', '', s).strip()
+        s = re.sub(r'[^\x20-\x7E]', '', s).strip()
+        if len(s) < 2:
+            return None
+        # Must contain at least one alphabetic letter (usernames cannot be pure numbers or chance %)
+        if not re.search(r'[a-zA-Z]', s):
+            return None
+        sl = s.lower()
+        bad_words = ['take', 'seat', 'check', 'call', 'bet', 'raise', 'allin', 'all-in', 'fold', 'win', 'muck', 'sitting', 'away', 'wait', 'time']
+        if any(bw == sl or sl.startswith(bw + ' ') or sl.endswith(' ' + bw) for bw in bad_words):
+            return None
+        if sl in ['lwin*', 'win*', '..', '--']:
+            return None
+        return s
+
     def _analyze_seat(self, img: Image.Image, seat_cfg: Dict[str, Any], words: List[Tuple]) -> PlayerSeat:
         w, h = img.size
         sid = seat_cfg["seat_id"]
@@ -548,7 +565,7 @@ class ClubGGTableDetector:
         all_text_lower = " ".join(t[4].lower() for t in seat_words)
 
         # Check empty seat
-        if "take" in all_text_lower and "seat" in all_text_lower:
+        if ("take" in all_text_lower and "seat" in all_text_lower) or ("take" in all_text_lower and not seat_words):
             seat.is_occupied = False
             self._seat_usernames.pop(sid, None)
             self._seat_stacks.pop(sid, None)
@@ -620,69 +637,64 @@ class ClubGGTableDetector:
             seat.stack = self._seat_stacks[sid]
             seat.is_occupied = True
 
-        # 5. Username (Non-cyan text scoped strictly to the dark capsule)
-        name_tokens = []
-        for cx, cy, nw, nh, text, is_cyan in seat_words:
-            if is_cyan:
-                continue
-            tl = text.lower()
-            if any(act in tl for act in action_keywords) or any(ign in tl for ign in ["take", "seat", "itting", "sitting", "away"]):
-                continue
-            m_f = re.search(r'\d+(?:\.\d+)?', text)
-            if m_f and seat.stack and abs(float(m_f.group(0)) - seat.stack) < 0.01:
-                continue
-            # Confine to name box
-            if not ((nb[0] - 0.025) <= cx <= (nb[2] + 0.025) and (nb[1] - 0.015) <= cy <= (nb[3] + 0.020)):
-                continue
-            clean_num = re.sub(r'\D', '', text)
-            if text.isdigit() and len(text) <= 2:
-                continue
-            if text.startswith('(') and text.endswith(')'):
-                continue
-            if text in ['.', '-', ':', '4.', '35', '48', '50', '23', 'WIN', 'LWIN*']:
-                continue
-            if len(text) >= 2:
+        # 5. Username Resolution
+        # CRITICAL USER DIRECTIVE: Do not update username unless a player changes (seat becomes vacant).
+        # In Texas Hold'em (ClubGG), showdown replaces the player name with win chance / equity % (e.g. 100%, 75%).
+        # Latching the confirmed username protects it from showdown equity % or transient occlusions.
+        if sid in self._seat_usernames and self._seat_usernames[sid]:
+            seat.username = self._seat_usernames[sid]
+            seat.is_occupied = True
+        else:
+            # First-time acquisition of username for this seat
+            name_tokens = []
+            for cx, cy, nw, nh, text, is_cyan in seat_words:
+                if is_cyan:
+                    continue
+                tl = text.lower()
+                if any(act in tl for act in action_keywords) or any(ign in tl for ign in ["take", "seat", "sitting", "away", "out"]):
+                    continue
+                # Skip showdown chance percentages (e.g. 100%, 75%, (100, 100)
+                if re.match(r'^\(?\d+\%?\)?$', text.strip()):
+                    continue
+                m_f = re.search(r'\d+(?:\.\d+)?', text)
+                if m_f and seat.stack and abs(float(m_f.group(0)) - seat.stack) < 0.01:
+                    continue
+                # Confine strictly to name_box (excludes left-side avatar/VPIP)
+                if not (nb[0] <= cx <= nb[2] and nb[1] <= cy <= nb[3]):
+                    continue
                 name_tokens.append((cx, text))
 
-        if name_tokens:
-            name_tokens.sort(key=lambda x: x[0])
-            raw_name = " ".join(t[1] for t in name_tokens)
-            clean_name = re.sub(r'[^\x20-\x7E]', '', raw_name).strip()
-            if clean_name and "take" not in clean_name.lower() and "seat" not in clean_name.lower():
-                seat.username = clean_name
-                seat.is_occupied = True
-                self._seat_usernames[sid] = clean_name
+            cand_name = None
+            if name_tokens:
+                name_tokens.sort(key=lambda x: x[0])
+                raw_name = " ".join(t[1] for t in name_tokens)
+                cand_name = self._clean_player_username(raw_name)
 
-        # Targeted Inner Crop Fallback for Username (handles Hero gold font, active halo flicker, low contrast)
-        if not seat.username and (seat.is_occupied or seat.is_in_hand or seat.stack is not None or sid in self._seat_usernames):
-            in_x1 = int((nb[0] + 0.008) * w)
-            in_x2 = int((nb[2] - 0.008) * w)
-            in_y1 = int((nb[1] + 0.004) * h)
-            in_y2 = int((nb[3] + 0.002) * h)
-            if in_x2 > in_x1 and in_y2 > in_y1:
-                n_crop = img.crop((in_x1, in_y1, in_x2, in_y2))
-                n_crop_2x = n_crop.resize((n_crop.width * 2, n_crop.height * 2), Image.LANCZOS)
-                crop_words = self.run_ocr(n_crop_2x)
-                c_tokens = []
-                for _, _, _, _, text in crop_words:
-                    tl = text.lower()
-                    if any(act in tl for act in action_keywords) or 'take' in tl or 'seat' in tl:
-                        continue
-                    if text.startswith('(') or text in ['.', '-', ':', '4.', '35', '48', '50', '23', 'WIN', 'LWIN*']:
-                        continue
-                    if len(text) >= 2:
+            # Targeted inner crop fallback only if full OCR found no candidate
+            if not cand_name and (seat.is_occupied or seat.is_in_hand or seat.stack is not None):
+                in_x1 = int(nb[0] * w)
+                in_x2 = int(nb[2] * w)
+                in_y1 = int(nb[1] * h)
+                in_y2 = int(nb[3] * h)
+                if in_x2 > in_x1 and in_y2 > in_y1:
+                    n_crop = img.crop((in_x1, in_y1, in_x2, in_y2))
+                    n_crop_2x = n_crop.resize((n_crop.width * 2, n_crop.height * 2), Image.LANCZOS)
+                    crop_words = self.run_ocr(n_crop_2x)
+                    c_tokens = []
+                    for _, _, _, _, text in crop_words:
+                        tl = text.lower()
+                        if any(act in tl for act in action_keywords) or 'take' in tl or 'seat' in tl:
+                            continue
+                        if re.match(r'^\(?\d+\%?\)?$', text.strip()):
+                            continue
                         c_tokens.append(text)
-                if c_tokens:
-                    raw_crop_name = " ".join(c_tokens)
-                    clean_crop = re.sub(r'[^\x20-\x7E]', '', raw_crop_name).strip()
-                    if clean_crop and "take" not in clean_crop.lower() and "seat" not in clean_crop.lower():
-                        seat.username = clean_crop
-                        seat.is_occupied = True
-                        self._seat_usernames[sid] = clean_crop
+                    if c_tokens:
+                        cand_name = self._clean_player_username(" ".join(c_tokens))
 
-        # Fallback to persistent username if halo completely obscured the name on this frame
-        if not seat.username and sid in self._seat_usernames and seat.is_occupied:
-            seat.username = self._seat_usernames[sid]
+            if cand_name:
+                seat.username = cand_name
+                seat.is_occupied = True
+                self._seat_usernames[sid] = cand_name
 
         if seat.username:
             ul = seat.username.lower()
@@ -698,6 +710,12 @@ class ClubGGTableDetector:
 
         # Check Bet Amount on Felt
         seat.current_bet = self._extract_bet_amount(words, seat_cfg["bet_box"], img, seat.is_occupied or seat.is_in_hand)
+
+        # Vacancy verification: if seat has no player data at all, mark vacant
+        if not seat.username and seat.stack is None and not seat.is_in_hand and not seat.action and not seat.current_bet:
+            seat.is_occupied = False
+            self._seat_usernames.pop(sid, None)
+            self._seat_stacks.pop(sid, None)
 
         return seat
 
