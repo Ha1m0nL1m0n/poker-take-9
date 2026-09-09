@@ -713,6 +713,11 @@ def record_touches(serial, output_file, mode="both", max_count=None, capture_dir
                 
             recorded_actions.append(record_entry)
             last_action_end_time = up_t
+            # Incremental save so actions are never lost even on termination
+            try:
+                save_recording(recorded_actions, output_file, screen_w, screen_h, serial)
+            except Exception:
+                pass
             
             if max_count and len(recorded_actions) >= max_count:
                 break
