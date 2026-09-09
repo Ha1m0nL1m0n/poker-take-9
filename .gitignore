@@ -5,6 +5,8 @@ __pycache__/
 
 # Test captures and screenshots
 captures/
+captures_*/
+game_history/
 *.png
 *.jpg
 *.jpeg

@@ -713,6 +713,17 @@ def record_touches(serial, output_file, mode="both", max_count=None, capture_dir
                 
             recorded_actions.append(record_entry)
             last_action_end_time = up_t
+            try:
+                with open(output_file, "w", encoding="utf-8") as f:
+                    json.dump({
+                        "device_serial": serial,
+                        "screen_resolution": f"{screen_w}x{screen_h}",
+                        "total_actions": len(recorded_actions),
+                        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "actions": recorded_actions
+                    }, f, indent=2)
+            except Exception:
+                pass
             
             if max_count and len(recorded_actions) >= max_count:
                 break
