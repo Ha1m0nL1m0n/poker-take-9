@@ -28,8 +28,10 @@ This codebase provides an end-to-end computer vision and optical recognition pip
 
 ```
 android/
-├── card_detector.py         # High-integrity card rank & suit detector (resolution-independent)
-├── table_detector.py        # Table geometry, OCR parser, stack isolation, seat HUD engine
+├── game_bot.py              # Autonomous Heads-Up tournament game bot (dry-run & live play)
+├── poker_strategy.py        # Heads-Up SNG/Spin decision engine (Push/Fold & GTO heuristics)
+├── card_detector.py         # High-integrity card rank & suit detector (Hero hole cards & board)
+├── table_detector.py        # Table geometry (8-max & Heads-Up), action bar, OCR parser
 ├── record_touches.py        # Dual touch/click recorder with CaptureManager (GDI scrcpy capture)
 ├── monitor_app_events.py    # Sound (AudioFlinger 50ms) & Vibration event detector
 ├── extract_assets.py        # Slices custom card & chip PNGs from Poker cards 1.3.zip
@@ -44,6 +46,7 @@ android/
 │       ├── cards/           # 52 custom pixel card sprites (2c.png .. As.png) + card backs
 │       └── chips/           # Sliced poker chip assets
 ├── captures/                # Test screenshots, historical events, and live stream buffers
+├── captures_hu/             # Heads-Up tournament recordings (198 events)
 └── scratch/                 # Ad-hoc verification scripts and test crops
 ```
 
