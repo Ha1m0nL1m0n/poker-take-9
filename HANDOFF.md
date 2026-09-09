@@ -1,10 +1,10 @@
 # ClubGG Poker HUD & Table Recognition System - Engineering Handoff Document
 
-> **Document Version**: 1.3  
+> **Document Version**: 1.4  
 > **Repository**: [https://github.com/Ha1m0nL1m0n/poker-take-9.git](https://github.com/Ha1m0nL1m0n/poker-take-9.git)  
 > **Target Device**: Google Pixel 9 Pro XL (Serial: `46261FDAS003BU`, Physical Resolution: `1008 x 2244`)  
 > **Target Application**: ClubGG (`com.nsus.clubgg`, Unity Engine)  
-> **Primary Branches**: `main` & `feature/table-detection` (Synced at commit `326be8e`)
+> **Primary Branches**: `main` & `feature/table-detection` (Synced at commit `a4b395b`)
 
 ---
 
@@ -13,12 +13,13 @@
 This codebase provides an end-to-end computer vision and optical recognition pipeline for live online poker tables on ClubGG (specifically 8-max No-Limit Texas Hold'em). The system detects table configurations, reads community cards, monitors active pots, isolates player stack sizes and usernames, reads VPIP badges, tracks dealer button positions, and renders everything inside a real-time interactive Flask Web GUI HUD.
 
 ### Current Operational Highlights:
+- **Stateful Username Latching & Showdown Equity Protection**: In Texas Hold'em / ClubGG, showdown states replace the player's name capsule with real-time win probability / equity percentages (e.g. `100%`, `75%`, `0%`). Re-reading the username on every frame previously corrupted player names. The detector now latches the confirmed username when a player occupies a seat and **never updates or overwrites it across frames/streets/showdowns** until the seat transitions to **VACANT** (`"Take Seat"`).
+- **Native OCR Resolution (No Word Splitting)**: Removed artificial 2x LANCZOS upscaling on frames, running Windows OCR directly at native image resolution. This eliminates interpolation blur that previously split alphanumeric screen names (e.g. `triger196` into `trigerl` and `96`) and corrupted names like `Lior1375`.
+- **Halo & Badge Physical Isolation**: Calibrated bounding geometry for all 8 seats physically excludes the left-side circular avatar and VPIP badge from the username text pill, preventing numeric badges or icy flames from polluting usernames.
 - **Sound-Triggered Event Architecture**: Continuous capture is eliminated to avoid grabbing mid-animation dirty frames (flipping cards, sliding chips, pulsing timer rings). The system relies on **AudioFlinger 50ms sound/vibration bursts** (`monitor_app_events.py`) to know when an event happens on the table, capturing post-animation settled frames (+500ms delayed).
-- **Zero-Flicker Web GUI HUD**: The web client syncs lightweight table state JSON via `/api/table_state` and only re-renders the DOM when state values actually change (`JSON.stringify(state)` diff check). Duplicate HTML/script tags that previously triggered concurrent runaway polling loops have been completely removed.
+- **Zero-Flicker Web GUI HUD**: The web client syncs lightweight table state JSON via `/api/table_state` and only re-renders the DOM when state values actually change (`JSON.stringify(state)` diff check).
 - **Card Detection Accuracy**: 100% verified on all community boards (Preflop, Flop, Turn, River) with resolution-independent template matching and zero duplicate deck invariant validation.
-- **Table OCR & OCR Isolation**: 100% verified stack extraction down to 2 decimal places using strict neon-cyan color thresholding, eliminating username digit contamination.
-- **Accurate Player Bet Sizes**: Normalized bounding boxes across all 8 seats calibrated to actual felt chip pill locations, with leading-zero repair (`050` $\rightarrow$ `0.50`), split-token merging, and fast ~25ms targeted crop fallback.
-- **Table Continuity & Invariant Smoothing**: Mathematical hand-state smoothing prevents mid-game table clearing or pot dropouts. Pot is non-decreasing during active hands; usernames persist across transient OCR misses (including Hero Seat 6 gold font).
+- **Table Continuity & Invariant Smoothing**: Mathematical hand-state smoothing prevents mid-game table clearing or pot dropouts. Pot is non-decreasing during active hands; usernames persist across transient OCR misses.
 - **Web GUI HUD**: Active and responsive at `http://127.0.0.1:5000` with virtual felt table, custom card pack sprites, source capture overlay canvas, and raw JSON export.
 
 ---
