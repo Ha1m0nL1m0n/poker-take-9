@@ -112,8 +112,8 @@ SEATS_8MAX = [
         "name": "Seat 7 (Lower-Mid-Left)",
         "box": (0.00, 0.56, 0.26, 0.68),
         "card_box": (0.02, 0.57, 0.19, 0.63),
-        "name_box": (0.02, 0.610, 0.22, 0.640),
-        "stack_box": (0.02, 0.640, 0.22, 0.665),
+        "name_box": (0.02, 0.620, 0.22, 0.655),
+        "stack_box": (0.02, 0.655, 0.22, 0.680),
         "vpip_box": (0.00, 0.60, 0.08, 0.65),
         "bet_box": (0.20, 0.64, 0.34, 0.72),
     },
@@ -200,6 +200,7 @@ class ClubGGTableDetector:
         self._last_community_cards: List[str] = []
         self._last_board_stage: str = "preflop"
         self._seat_usernames: Dict[int, str] = {}
+        self._seat_stacks: Dict[int, float] = {}
 
 
     async def _run_winrt_ocr(self, img: Image.Image) -> List[Tuple[float, float, float, float, str]]:
@@ -525,8 +526,12 @@ class ClubGGTableDetector:
         sid = seat_cfg["seat_id"]
         sname = seat_cfg["name"]
         bx1, by1, bx2, by2 = seat_cfg["box"]
-        
+        nb = seat_cfg["name_box"]
+        sb = seat_cfg["stack_box"]
+
         seat = PlayerSeat(seat_id=sid, name=sname)
+        # Note: VPIP recognition explicitly omitted per user directive
+        seat.vpip = None
 
         # 1. Check Words in this Seat Box (excluding any bet tokens to prevent stack/username pollution)
         seat_words = []
@@ -541,10 +546,12 @@ class ClubGGTableDetector:
                 seat_words.append((cx, cy, nw, nh, text, is_cyan))
 
         all_text_lower = " ".join(t[4].lower() for t in seat_words)
-        
+
         # Check empty seat
         if "take" in all_text_lower and "seat" in all_text_lower:
             seat.is_occupied = False
+            self._seat_usernames.pop(sid, None)
+            self._seat_stacks.pop(sid, None)
             return seat
 
         # 2. In-Hand Detection (Check Card Backs)
@@ -566,10 +573,12 @@ class ClubGGTableDetector:
             if seat.action:
                 break
 
-        # 4. Stack Size (Neon Cyan token has 1st priority; fallback to lowest number in box)
+        # 4. Stack Size (Neon Cyan token has 1st priority; fallback to inner crop bypassing halo)
         stack_val = None
-        cyan_words = [w for w in seat_words if w[5]]
-        for _, _, _, _, text, _ in cyan_words:
+        cyan_words = [t for t in seat_words if t[5]]
+        for cx, cy, nw, nh, text, _ in cyan_words:
+            if not ((sb[0] - 0.03) <= cx <= (sb[2] + 0.03) and (sb[1] - 0.018) <= cy <= (sb[3] + 0.020)):
+                continue
             clean = re.sub(r'[^\d\.]', '', text)
             if clean and clean.count('.') <= 1:
                 try:
@@ -580,62 +589,57 @@ class ClubGGTableDetector:
                 except ValueError:
                     pass
 
+        # If full-image OCR missed the stack (flickering halo washed out contrast),
+        # perform an inner crop on the stack box with inset to physically exclude the outer halo!
         if stack_val is None:
-            stack_candidates = []
-            for cx, cy, nw, nh, text, _ in seat_words:
-                clean = re.sub(r'[^\d\.]', '', text)
-                if clean and clean.count('.') <= 1:
-                    try:
-                        val = float(clean)
-                        if 0.01 <= val <= 1000000 and val != sid:
-                            stack_candidates.append((cy, val))
-                    except ValueError:
-                        pass
-            if stack_candidates:
-                stack_candidates.sort(key=lambda x: x[0], reverse=True)
-                stack_val = stack_candidates[0][1]
+            ic_x1 = int((sb[0] + 0.008) * w)
+            ic_x2 = int((sb[2] - 0.008) * w)
+            ic_y1 = int((sb[1] + 0.001) * h)
+            ic_y2 = int((sb[3] + 0.004) * h)
+            if ic_x2 > ic_x1 and ic_y2 > ic_y1:
+                s_crop = img.crop((ic_x1, ic_y1, ic_x2, ic_y2))
+                s_crop_2x = s_crop.resize((s_crop.width * 2, s_crop.height * 2), Image.LANCZOS)
+                s_words = self.run_ocr(s_crop_2x)
+                for _, _, _, _, text in s_words:
+                    clean = re.sub(r'[^\d\.]', '', text)
+                    if clean and clean.count('.') <= 1:
+                        try:
+                            val = float(clean)
+                            if 0.01 <= val <= 1000000 and val != sid:
+                                stack_val = val
+                                break
+                        except ValueError:
+                            pass
 
         if stack_val is not None:
             seat.stack = stack_val
             seat.is_occupied = True
-
-        # 5. VPIP Score (Badge top-left of name)
-        vbx1, vby1, vbx2, vby2 = seat_cfg["vpip_box"]
-        vpip_words = []
-        for cx, cy, nw, nh, text, _ in seat_words:
-            if (vbx1 - 0.04) <= cx <= (vbx2 + 0.04) and (by1 - 0.02) <= cy <= (by1 + 0.08):
-                clean = re.sub(r'\D', '', text)
-                if clean and 5 <= int(clean) <= 100:
-                    vpip_words.append(int(clean))
-        if vpip_words:
-            seat.vpip = vpip_words[0]
+            self._seat_stacks[sid] = stack_val
+        elif sid in self._seat_stacks and (seat.is_in_hand or seat.action or sid in self._seat_usernames):
+            # Retain confirmed stack across transient halo flicker
+            seat.stack = self._seat_stacks[sid]
             seat.is_occupied = True
 
-        # 6. Username (Non-cyan text scoped to the dark capsule)
-        name_x1, name_y1, name_x2, name_y2 = seat_cfg["name_box"]
+        # 5. Username (Non-cyan text scoped strictly to the dark capsule)
         name_tokens = []
         for cx, cy, nw, nh, text, is_cyan in seat_words:
             if is_cyan:
                 continue
             tl = text.lower()
-            if any(act in tl for act in action_keywords):
+            if any(act in tl for act in action_keywords) or any(ign in tl for ign in ["take", "seat", "itting", "sitting", "away"]):
                 continue
             m_f = re.search(r'\d+(?:\.\d+)?', text)
-            if m_f and seat.stack:
-                try:
-                    if abs(float(m_f.group(0)) - seat.stack) < 0.01:
-                        continue
-                except ValueError:
-                    pass
-            # Confine to capsule zone (excludes avatar side badges)
-            if not ((name_x1 - 0.04) <= cx <= (name_x2 + 0.04) and (name_y1 - 0.02) <= cy <= (name_y2 + 0.03)):
+            if m_f and seat.stack and abs(float(m_f.group(0)) - seat.stack) < 0.01:
+                continue
+            # Confine to name box
+            if not ((nb[0] - 0.025) <= cx <= (nb[2] + 0.025) and (nb[1] - 0.015) <= cy <= (nb[3] + 0.020)):
                 continue
             clean_num = re.sub(r'\D', '', text)
             if text.isdigit() and len(text) <= 2:
                 continue
-            if text.startswith('(') and text.endswith(')') and clean_num.isdigit():
+            if text.startswith('(') and text.endswith(')'):
                 continue
-            if text in ['.', '-', ':', '4.', '35', '48', '50', '23']:
+            if text in ['.', '-', ':', '4.', '35', '48', '50', '23', 'WIN', 'LWIN*']:
                 continue
             if len(text) >= 2:
                 name_tokens.append((cx, text))
@@ -643,28 +647,50 @@ class ClubGGTableDetector:
         if name_tokens:
             name_tokens.sort(key=lambda x: x[0])
             raw_name = " ".join(t[1] for t in name_tokens)
-            seat.username = re.sub(r'[^\x20-\x7E]', '', raw_name).strip()
-            seat.is_occupied = True
-
-        # Targeted Crop Fallback for Username (handles Hero gold font, active timer borders, low contrast)
-        if not seat.username and (seat.is_occupied or seat.is_in_hand or seat.stack is not None):
-            nbx1, nby1, nbx2, nby2 = seat_cfg["name_box"]
-            n_crop = img.crop((int(nbx1 * w), int(nby1 * h), int(nbx2 * w), int(nby2 * h)))
-            n_crop_2x = n_crop.resize((n_crop.width * 2, n_crop.height * 2), Image.LANCZOS)
-            crop_words = self.run_ocr(n_crop_2x)
-            c_tokens = []
-            for _, _, _, _, text in crop_words:
-                tl = text.lower()
-                if any(act in tl for act in action_keywords):
-                    continue
-                if text in ['.', '-', ':', '4.', '35', '48', '50', '23', 'seat', 'take']:
-                    continue
-                if len(text) >= 2:
-                    c_tokens.append(text)
-            if c_tokens:
-                raw_crop_name = " ".join(c_tokens)
-                seat.username = re.sub(r'[^\x20-\x7E]', '', raw_crop_name).strip()
+            clean_name = re.sub(r'[^\x20-\x7E]', '', raw_name).strip()
+            if clean_name and "take" not in clean_name.lower() and "seat" not in clean_name.lower():
+                seat.username = clean_name
                 seat.is_occupied = True
+                self._seat_usernames[sid] = clean_name
+
+        # Targeted Inner Crop Fallback for Username (handles Hero gold font, active halo flicker, low contrast)
+        if not seat.username and (seat.is_occupied or seat.is_in_hand or seat.stack is not None or sid in self._seat_usernames):
+            in_x1 = int((nb[0] + 0.008) * w)
+            in_x2 = int((nb[2] - 0.008) * w)
+            in_y1 = int((nb[1] + 0.004) * h)
+            in_y2 = int((nb[3] + 0.002) * h)
+            if in_x2 > in_x1 and in_y2 > in_y1:
+                n_crop = img.crop((in_x1, in_y1, in_x2, in_y2))
+                n_crop_2x = n_crop.resize((n_crop.width * 2, n_crop.height * 2), Image.LANCZOS)
+                crop_words = self.run_ocr(n_crop_2x)
+                c_tokens = []
+                for _, _, _, _, text in crop_words:
+                    tl = text.lower()
+                    if any(act in tl for act in action_keywords) or 'take' in tl or 'seat' in tl:
+                        continue
+                    if text.startswith('(') or text in ['.', '-', ':', '4.', '35', '48', '50', '23', 'WIN', 'LWIN*']:
+                        continue
+                    if len(text) >= 2:
+                        c_tokens.append(text)
+                if c_tokens:
+                    raw_crop_name = " ".join(c_tokens)
+                    clean_crop = re.sub(r'[^\x20-\x7E]', '', raw_crop_name).strip()
+                    if clean_crop and "take" not in clean_crop.lower() and "seat" not in clean_crop.lower():
+                        seat.username = clean_crop
+                        seat.is_occupied = True
+                        self._seat_usernames[sid] = clean_crop
+
+        # Fallback to persistent username if halo completely obscured the name on this frame
+        if not seat.username and sid in self._seat_usernames and seat.is_occupied:
+            seat.username = self._seat_usernames[sid]
+
+        if seat.username:
+            ul = seat.username.lower()
+            if "take" in ul or "seat" in ul:
+                seat.is_occupied = False
+                seat.username = None
+                self._seat_usernames.pop(sid, None)
+                self._seat_stacks.pop(sid, None)
 
         # Check Sitting Out
         if "sitting" in all_text_lower or "away" in all_text_lower:
