@@ -97,6 +97,186 @@ class CardDetector:
         # Validate board integrity
         return self._validate_board(detected_cards)
 
+    def detect_hero_hole_cards(self, full_screen: Image.Image, hero_box=(0.04, 0.73, 0.28, 0.82)) -> List[DetectedCard]:
+        """
+        Detects Hero hole cards (dual overlapping cards) from the hero table position.
+        Default hero_box is calibrated for ClubGG Heads-Up layout.
+        """
+        W, H = full_screen.size
+        bx1 = int(hero_box[0] * W)
+        by1 = int(hero_box[1] * H)
+        bx2 = int(hero_box[2] * W)
+        by2 = int(hero_box[3] * H)
+        crop = full_screen.crop((bx1, by1, bx2, by2))
+        
+        # Find tight card body of the pair
+        rgb = crop.convert("RGB")
+        cdata = rgb.load()
+        cW, cH = crop.size
+        mask = Image.new("1", (cW, cH), 0)
+        for y in range(cH):
+            for x in range(cW):
+                r, g, b = cdata[x, y]
+                if r > 185 and g > 185 and b > 185:
+                    mask.putpixel((x, y), 1)
+        bbox = mask.getbbox()
+        if not bbox:
+            return []
+            
+        b_x1, b_y1, b_x2, b_y2 = bbox
+        bw = b_x2 - b_x1
+        bh = b_y2 - b_y1
+        if bw < 45 or bh < 30:
+            return []
+            
+        body = crop.crop(bbox)
+        left_body = body.crop((0, 0, int(bw * 0.55), bh))
+        right_body = body.crop((int(bw * 0.42), 0, bw, bh))
+        
+        c1 = self._extract_corner_card(left_body)
+        c2 = self._extract_corner_card(right_body)
+        
+        res = []
+        if c1:
+            c1.bbox = (bx1 + b_x1, by1 + b_y1, bx1 + b_x1 + int(bw * 0.55), by1 + b_y2)
+            res.append(c1)
+        if c2:
+            c2.bbox = (bx1 + b_x1 + int(bw * 0.42), by1 + b_y1, bx1 + b_x2, by1 + b_y2)
+            res.append(c2)
+        return res
+
+    def _classify_small_suit(self, glyph_mask: Image.Image, is_red: bool) -> Tuple[str, float]:
+        """Classifies small suit glyph from top-left corner of card."""
+        W, H = glyph_mask.size
+        data = glyph_mask.load()
+        if is_red:
+            top_y = None
+            for y in range(H):
+                if any(data[x, y] == 1 for x in range(W)):
+                    top_y = y
+                    break
+            if top_y is None:
+                return "d", 0.70
+            
+            top_pts = [x for x in range(W) if data[x, top_y] == 1]
+            cleft = False
+            mid_x = W // 2
+            for cy in range(top_y + 1, min(top_y + 4, H)):
+                if data[mid_x, cy] == 0 and (data[mid_x - 1, cy] == 1 or data[mid_x + 1, cy] == 1):
+                    cleft = True
+                    break
+            if cleft:
+                return "h", 0.95
+            if len(top_pts) <= 3:
+                return "d", 0.95
+            return "d", 0.85
+        else:
+            top_y = None
+            for y in range(H):
+                if any(data[x, y] == 1 for x in range(W)):
+                    top_y = y
+                    break
+            if top_y is None:
+                return "s", 0.70
+            top_pts = [x for x in range(W) if data[x, top_y] == 1]
+            if len(top_pts) <= 2:
+                return "s", 0.95
+            return "c", 0.90
+
+    def _extract_corner_card(self, card_crop: Image.Image) -> Optional[DetectedCard]:
+        """Extracts card rank and suit from overlapping corner glyphs."""
+        W, H = card_crop.size
+        rgb = card_crop.convert("RGB")
+        data = rgb.load()
+        
+        red_pts = 0
+        black_pts = 0
+        for y in range(int(H * 0.55)):
+            for x in range(int(W * 0.65)):
+                r, g, b = data[x, y]
+                if r > 115 and r > g + 25 and r > b + 25:
+                    red_pts += 1
+                elif r < 100 and g < 100 and b < 100 and abs(r - g) < 25:
+                    black_pts += 1
+                    
+        is_red = red_pts > black_pts
+        
+        fg_mask = Image.new("1", (W, H), 0)
+        for y in range(H):
+            for x in range(W):
+                r, g, b = data[x, y]
+                if is_red:
+                    if r > 110 and r > g + 25 and r > b + 25:
+                        fg_mask.putpixel((x, y), 1)
+                else:
+                    if r < 100 and g < 100 and b < 100 and abs(r - g) < 25:
+                        fg_mask.putpixel((x, y), 1)
+                        
+        bbox = fg_mask.getbbox()
+        if not bbox:
+            return None
+            
+        fg = fg_mask.crop(bbox)
+        fw, fh = fg.size
+        
+        gap_y = None
+        for y in range(int(fh * 0.35), int(fh * 0.75)):
+            if sum(fg.getpixel((x, y)) for x in range(fw)) == 0:
+                gap_y = y
+                break
+                
+        if gap_y:
+            rank_mask = fg.crop((0, 0, fw, gap_y))
+            suit_mask = fg.crop((0, gap_y, fw, fh))
+        else:
+            rank_mask = fg.crop((0, 0, fw, int(fh * 0.55)))
+            suit_mask = fg.crop((0, int(fh * 0.55), fw, fh))
+            
+        r_bbox = rank_mask.getbbox()
+        s_bbox = suit_mask.getbbox()
+        if not r_bbox or not s_bbox:
+            return None
+            
+        r_glyph = rank_mask.crop(r_bbox)
+        s_glyph = suit_mask.crop(s_bbox)
+        
+        rgw, rgh = r_glyph.size
+        col_proj = [sum(r_glyph.getpixel((x, y)) for y in range(rgh)) for x in range(rgw)]
+        if rgw >= rgh * 0.70 and len(col_proj) >= 7:
+            mid_start = int(rgw * 0.25)
+            mid_end = int(rgw * 0.75)
+            mid_valley = min(col_proj[mid_start:mid_end])
+            max_peak = max(col_proj)
+            if mid_valley <= max_peak * 0.45:
+                rank_str = "T"
+                rank_conf = 0.98
+            else:
+                rank_str, rank_conf = self._template_match_glyph(r_glyph)
+        else:
+            rank_str, rank_conf = self._template_match_glyph(r_glyph)
+            
+        suit_str, suit_conf = self._classify_small_suit(s_glyph, is_red)
+        conf = round(rank_conf * 0.5 + suit_conf * 0.5, 3)
+        return DetectedCard(
+            card=f"{rank_str}{suit_str}",
+            rank=rank_str,
+            suit=suit_str,
+            confidence=conf,
+            bbox=bbox
+        )
+
+    def _template_match_glyph(self, r_glyph: Image.Image) -> Tuple[str, float]:
+        norm = r_glyph.resize((8, 11), Image.Resampling.NEAREST)
+        cdata = norm.load()
+        best_rank = "?"
+        best_score = -1.0
+        for rank_name, template in self.rank_templates.items():
+            score = self._compute_iou(cdata, template, 8, 11)
+            if score > best_score:
+                best_score = score
+                best_rank = rank_name
+        return best_rank, max(0.0, min(1.0, best_score))
+
     def analyze_card(self, card_crop: Image.Image) -> Optional[DetectedCard]:
         """Analyzes an isolated card crop to determine rank, suit, and confidence."""
         # 1. Extract tight white card body
@@ -335,9 +515,15 @@ class CardDetector:
             char_glyph = char_glyph.crop(c_bbox)
         cgw, cgh = char_glyph.size
 
-        # 1. Distinctive "10" detection: 10 has two characters ("10") with aspect ratio >= 0.78
-        if cgw >= cgh * 0.78:
-            return "T", 0.98
+        # 1. Distinctive "10" detection: 10 has dual characters ("10") with aspect ratio >= 0.72 and central valley
+        col_proj = [sum(char_glyph.getpixel((x, y)) for y in range(cgh)) for x in range(cgw)]
+        if cgw >= cgh * 0.72 and len(col_proj) >= 7:
+            mid_start = int(cgw * 0.25)
+            mid_end = int(cgw * 0.75)
+            mid_valley = min(col_proj[mid_start:mid_end])
+            max_peak = max(col_proj)
+            if mid_valley <= max_peak * 0.45:
+                return "T", 0.98
 
         # 2. Normalize candidate glyph to 8x11 grid for template comparison
         norm_candidate = char_glyph.resize((8, 11), Image.Resampling.NEAREST)

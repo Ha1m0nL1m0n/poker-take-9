@@ -129,7 +129,31 @@ SEATS_8MAX = [
     }
 ]
 
+SEATS_HEADS_UP = [
+    {
+        "seat_id": 1,
+        "name": "Hero (Bottom-Left)",
+        "box": (0.03, 0.73, 0.35, 0.86),
+        "card_box": (0.06, 0.74, 0.26, 0.81),
+        "name_box": (0.050, 0.805, 0.260, 0.830),
+        "stack_box": (0.080, 0.830, 0.260, 0.855),
+        "vpip_box": (0.02, 0.77, 0.12, 0.82),
+        "bet_box": (0.32, 0.74, 0.48, 0.81),
+    },
+    {
+        "seat_id": 2,
+        "name": "Opponent (Top-Center)",
+        "box": (0.38, 0.16, 0.62, 0.27),
+        "card_box": (0.42, 0.17, 0.57, 0.22),
+        "name_box": (0.440, 0.210, 0.600, 0.235),
+        "stack_box": (0.440, 0.235, 0.600, 0.258),
+        "vpip_box": (0.36, 0.19, 0.44, 0.24),
+        "bet_box": (0.42, 0.26, 0.58, 0.31),
+    }
+]
+
 COMMUNITY_CARDS_BOX = (0.18, 0.47, 0.82, 0.56)
+COMMUNITY_CARDS_HU_BOX = (0.15, 0.47, 0.85, 0.57)
 POT_BOX = (0.35, 0.43, 0.65, 0.48)
 BLINDS_BOX = (0.30, 0.63, 0.70, 0.72)
 WAITING_QUEUE_BOX = (0.50, 0.93, 0.95, 0.98)
@@ -157,7 +181,7 @@ class PlayerSeat:
 @dataclass
 class PokerTableState:
     timestamp: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
-    table_type: str = "8-max"
+    table_type: str = "8-max" # "8-max" or "heads_up"
     game_type: str = "NLH"
     blinds: Optional[str] = None
     total_pot: Optional[float] = None
@@ -172,6 +196,13 @@ class PokerTableState:
     sitting_out_players: int = 0
     waiting_players: Optional[int] = None
     seats: List[PlayerSeat] = field(default_factory=list)
+    
+    # Heads-Up & Automation Additions
+    hero_cards: List[str] = field(default_factory=list)
+    hero_cards_detail: List[Dict[str, Any]] = field(default_factory=list)
+    is_hero_turn: bool = False
+    action_buttons: Optional[Dict[str, Any]] = None
+    tournament_info: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -287,34 +318,102 @@ class ClubGGTableDetector:
 
         table_state = PokerTableState()
 
-        # 1. Parse Table Blinds & Tournament Info
-        table_state.blinds = self._extract_blinds(ocr_words)
+        # Determine table mode: Heads-Up vs 8-Max
+        all_text_lower = " ".join(t[4].lower() for t in ocr_words)
+        is_heads_up = ("rank" in all_text_lower and ("1st" in all_text_lower or "2nd" in all_text_lower)) or \
+                      ("min." in all_text_lower and "stack" in all_text_lower) or \
+                      ("next" in all_text_lower and "blinds" in all_text_lower)
 
-        # 2. Parse Total Pot (with crop fallback)
-        table_state.total_pot = self._extract_total_pot(ocr_words, img)
+        if is_heads_up:
+            table_state.table_type = "heads_up"
+            table_state.total_seats = 2
 
-        # 3. Detect Community Cards & Board Stage with CardDetector
-        cards, stage, cards_detail, board_integrity = self._detect_community_cards(img)
-        table_state.community_cards = cards
-        table_state.board_stage = stage
-        table_state.cards_detail = cards_detail
-        table_state.board_integrity = board_integrity
+            # 1. Parse Blinds & Tournament Info
+            tourney_info = self._extract_tournament_info(ocr_words)
+            table_state.tournament_info = tourney_info
+            if tourney_info and tourney_info.get("blinds"):
+                table_state.blinds = tourney_info["blinds"]
+            else:
+                table_state.blinds = self._extract_blinds(ocr_words)
 
-        # 4. Detect Waiting Queue Count
-        table_state.waiting_players = self._extract_waiting_queue(ocr_words)
+            # 2. Parse Total Pot
+            table_state.total_pot = self._extract_total_pot(ocr_words, img)
 
-        # 5. Detect Dealer Button ('D') Position
-        dealer_seat_id = self._detect_dealer_button(img)
-        table_state.dealer_seat = dealer_seat_id
+            # 3. Detect Community Cards & Board Stage (with HU community box)
+            rep = self.card_detector.detect_community_cards(img, comm_box=COMMUNITY_CARDS_HU_BOX)
+            table_state.community_cards = [c.card for c in rep.cards]
+            table_state.board_stage = rep.stage.lower()
+            table_state.cards_detail = [c.to_dict() for c in rep.cards]
+            table_state.board_integrity = rep.to_dict()
 
-        # 6. Parse All 8 Seats
-        seats = []
-        for seat_cfg in SEATS_8MAX:
-            seat_obj = self._analyze_seat(img, seat_cfg, ocr_words)
-            seats.append(seat_obj)
+            # 4. Detect Hero Hole Cards
+            hero_card_objs = self.card_detector.detect_hero_hole_cards(img)
+            table_state.hero_cards = [c.card for c in hero_card_objs]
+            table_state.hero_cards_detail = [c.to_dict() for c in hero_card_objs]
 
-        # 7. Assign Positions (BTN, SB, BB, UTG, etc.)
-        self._assign_positions(seats, dealer_seat_id)
+            # 5. Detect Dealer Button ('D') Position in Heads-Up
+            dealer_seat_id = self._detect_hu_dealer_button(img)
+            table_state.dealer_seat = dealer_seat_id
+
+            # 6. Parse Heads-Up Seats (Seat 1 = Hero, Seat 2 = Opponent)
+            seats = []
+            for seat_cfg in SEATS_HEADS_UP:
+                seat_obj = self._analyze_seat(img, seat_cfg, ocr_words)
+                if seat_cfg["seat_id"] == 1:
+                    seat_obj.cards = list(table_state.hero_cards)
+                    seat_obj.cards_detail = list(table_state.hero_cards_detail)
+                    if not seat_obj.username:
+                        seat_obj.username = "Hero"
+                        seat_obj.is_occupied = True
+                seats.append(seat_obj)
+
+            # 7. Assign Positions (BTN/SB vs BB)
+            if dealer_seat_id == 1:
+                seats[0].position = "BTN/SB"
+                seats[1].position = "BB"
+            elif dealer_seat_id == 2:
+                seats[0].position = "BB"
+                seats[1].position = "BTN/SB"
+
+            # 8. Parse Action Buttons & Hero Turn Status
+            act_info = self._extract_action_buttons(ocr_words, w, h)
+            table_state.is_hero_turn = act_info["is_hero_turn"]
+            table_state.action_buttons = act_info
+        else:
+            # Standard 8-Max Pipeline
+            # 1. Parse Table Blinds & Tournament Info
+            table_state.blinds = self._extract_blinds(ocr_words)
+
+            # 2. Parse Total Pot (with crop fallback)
+            table_state.total_pot = self._extract_total_pot(ocr_words, img)
+
+            # 3. Detect Community Cards & Board Stage with CardDetector
+            cards, stage, cards_detail, board_integrity = self._detect_community_cards(img)
+            table_state.community_cards = cards
+            table_state.board_stage = stage
+            table_state.cards_detail = cards_detail
+            table_state.board_integrity = board_integrity
+
+            # 4. Detect Waiting Queue Count
+            table_state.waiting_players = self._extract_waiting_queue(ocr_words)
+
+            # 5. Detect Dealer Button ('D') Position
+            dealer_seat_id = self._detect_dealer_button(img)
+            table_state.dealer_seat = dealer_seat_id
+
+            # 6. Parse All 8 Seats
+            seats = []
+            for seat_cfg in SEATS_8MAX:
+                seat_obj = self._analyze_seat(img, seat_cfg, ocr_words)
+                seats.append(seat_obj)
+
+            # 7. Assign Positions (BTN, SB, BB, UTG, etc.)
+            self._assign_positions(seats, dealer_seat_id)
+
+            # 8. Parse Action Buttons
+            act_info = self._extract_action_buttons(ocr_words, w, h)
+            table_state.is_hero_turn = act_info["is_hero_turn"]
+            table_state.action_buttons = act_info
 
         # 8. Temporal Hand State Smoothing
         is_new_hand = False
@@ -512,6 +611,127 @@ class ClubGGTableDetector:
                 nearest_seat = s["seat_id"]
 
         return nearest_seat
+
+    def _detect_hu_dealer_button(self, img: Image.Image) -> Optional[int]:
+        """Detects dealer button position in Heads-Up matches (1 = Hero, 2 = Opponent)."""
+        w, h = img.size
+        felt_box = (int(0.05 * w), int(0.15 * h), int(0.95 * w), int(0.85 * h))
+        felt = img.crop(felt_box)
+        gold_pts = []
+        for y in range(0, felt.height, 2):
+            for x in range(0, felt.width, 2):
+                abs_x = (x + felt_box[0]) / float(w)
+                abs_y = (y + felt_box[1]) / float(h)
+                # Exclude center pot chip area and right-side sizing buttons
+                if 0.42 <= abs_y <= 0.52:
+                    continue
+                if abs_x > 0.65 and abs_y > 0.70:
+                    continue
+                r, g, b = felt.getpixel((x, y))[:3]
+                if r > 190 and g > 150 and b < 90:
+                    gold_pts.append((x + felt_box[0], y + felt_box[1]))
+
+        if not gold_pts:
+            return None
+
+        clusters = []
+        for p in gold_pts:
+            added = False
+            for c in clusters:
+                cx = sum(pt[0] for pt in c) / len(c)
+                cy = sum(pt[1] for pt in c) / len(c)
+                if abs(p[0] - cx) < 35 and abs(p[1] - cy) < 35:
+                    c.append(p)
+                    added = True
+                    break
+            if not added:
+                clusters.append([p])
+
+        for c in sorted(clusters, key=lambda cl: len(cl), reverse=True):
+            if 10 <= len(c) <= 150:
+                cx = sum(pt[0] for pt in c) / len(c) / float(w)
+                cy = sum(pt[1] for pt in c) / len(c) / float(h)
+                d_hero = math.hypot(cx - 0.34, cy - 0.77)
+                d_opp = math.hypot(cx - 0.38, cy - 0.25)
+                if d_hero < d_opp and d_hero < 0.18:
+                    return 1
+                elif d_opp < d_hero and d_opp < 0.18:
+                    return 2
+        return None
+
+    def _extract_tournament_info(self, words: List[Tuple]) -> Dict[str, Any]:
+        """Extracts tournament blinds, level timer, and Hero rank."""
+        tourney_words = [w for w in words if 0.62 <= w[1] <= 0.76]
+        tourney_text = " ".join(w[4] for w in sorted(tourney_words, key=lambda x: (x[1], x[0])))
+        
+        m_blinds = re.search(r"(\d+)\s*/\s*(\d+)", tourney_text)
+        sb, bb = (int(m_blinds.group(1)), int(m_blinds.group(2))) if m_blinds else (None, None)
+        blinds_str = f"{sb}/{bb}" if sb and bb else None
+        
+        m_rank = re.search(r"(1st|2nd)\s*/\s*(\d+)", tourney_text, re.IGNORECASE)
+        rank_str = m_rank.group(0) if m_rank else None
+        
+        return {
+            "blinds": blinds_str,
+            "sb": sb,
+            "bb": bb,
+            "rank": rank_str,
+            "raw_text": tourney_text
+        }
+
+    def _extract_action_buttons(self, words: List[Tuple], img_w: int, img_h: int) -> Dict[str, Any]:
+        """Extracts action buttons state (Fold, Check, Call, Bet, Raise) and pricing."""
+        bottom_words = [w for w in words if w[1] > 0.92]
+        full_bot = " ".join(w[4] for w in sorted(bottom_words, key=lambda x: x[0]))
+        
+        can_fold = "Fold" in full_bot
+        can_check = "Check" in full_bot and "Fold" not in full_bot.split("Check")[0]
+        can_call = "Call" in full_bot
+        can_bet = "Bet" in full_bot
+        can_raise = "Raise" in full_bot
+        
+        is_hero_turn = can_check or can_call or can_bet or can_raise or (can_fold and "Check /" not in full_bot)
+        
+        call_amount = None
+        if can_call:
+            mid_words = [w for w in bottom_words if 0.38 <= w[0] <= 0.62]
+            for w in mid_words:
+                clean_num = w[4].replace(",", "").replace(".", "")
+                if clean_num.isdigit():
+                    call_amount = float(w[4].replace(",", ""))
+                    break
+                    
+        bet_raise_amount = None
+        if can_bet or can_raise:
+            right_words = [w for w in bottom_words if 0.75 <= w[0] <= 0.98]
+            for w in right_words:
+                clean_num = w[4].replace(",", "").replace(".", "")
+                if clean_num.isdigit():
+                    bet_raise_amount = float(w[4].replace(",", ""))
+                    break
+                    
+        sizing_words = [w for w in words if 0.75 <= w[1] <= 0.92 and 0.68 <= w[0] <= 0.98]
+        presets = {}
+        preset_text = " ".join(w[4] for w in sorted(sizing_words, key=lambda x: (x[1], x[0])))
+        for m in re.finditer(r"(33%|50%|75%|100%|Pot|Max|2x|3x|4x)\s*(?:Raise\s*to\s*)?(\d[\d,]*)", preset_text, re.IGNORECASE):
+            tag = m.group(1).upper()
+            val = float(m.group(2).replace(",", ""))
+            presets[tag] = val
+
+        return {
+            "is_hero_turn": is_hero_turn,
+            "can_fold": can_fold,
+            "can_check": can_check,
+            "can_call": can_call,
+            "call_amount": call_amount,
+            "can_bet": can_bet,
+            "can_raise": can_raise,
+            "bet_raise_amount": bet_raise_amount,
+            "presets": presets,
+            "fold_tap": (184, 2169),
+            "check_call_tap": (504, 2165),
+            "bet_raise_tap": (867, 2165)
+        }
 
     def _clean_player_username(self, raw: str) -> Optional[str]:
         """Cleans and validates a candidate poker username, stripping showdown equity % and badges."""
