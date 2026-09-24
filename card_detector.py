@@ -16,6 +16,7 @@ and player showdown hands with strict Texas Hold'em data integrity validation:
 from dataclasses import dataclass, asdict
 from typing import List, Optional, Tuple, Dict, Any, Set
 from PIL import Image, ImageOps
+import numpy as np
 
 # 13 Poker Ranks & 4 Suits
 RANKS = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"]
@@ -771,6 +772,261 @@ class CardDetector:
                 "########"
             ]
         }
+
+    # -------------------------------------------------------------
+    # GGPoker / 7XL 4-Color Short Deck Detection Engine
+    # -------------------------------------------------------------
+    GGPOKER_TEMPLATES_12x16 = {
+        "A": [
+            ".....##.....", "....####....", "....####....", "....####....",
+            "....##.##...", "...##..##...", "...##..##...", "...##..##...",
+            "...##..###..", "..########..", "..########..", "..##....###.",
+            ".##......##.", ".##......##.", ".##......###", "###......###",
+        ],
+        "K": [
+            ".......##...", "##....###...", "##....##....", "##...##.....",
+            "###..##.....", "###.##......", "######......", "######......",
+            "#######.....", ".###.##.....", ".##..###....", ".##...###...",
+            ".##....###..", ".##.....###.", ".##.....####", ".##.........",
+        ],
+        "Q": [
+            "...######...", "..########..", ".###....###.", ".##......##.",
+            "###......###", "###......###", "##........##", "##........##",
+            "##...##...##", "###..##..###", "###..###.###", ".##...#####.",
+            ".###..#####.", "..########..", "....######..", "........###.",
+        ],
+        "J": [
+            "........####", "........####", "........####", "........####",
+            "........####", "........####", "........####", "........####",
+            "........####", "........####", "........####", "........####",
+            "........####", ".###...####.", "##########..", "...######...",
+        ],
+        "8": [
+            "..########..", ".##########.", ".###....###.", ".###.....###",
+            ".###.....###", ".###....###.", "..########..", "..########..",
+            ".####...###.", "###......###", "###......###", "###......###",
+            "###......###", "#####..####.", ".#########..", "...######...",
+        ],
+        "7": [
+            "############", "###########.", "#......####.", ".......###..",
+            ".......###..", ".......###..", "......###...", "......###...",
+            ".....####...", ".....###....", ".....###....", "....###.....",
+            "....###.....", "....###.....", "...####.....", "...####.....",
+        ],
+        "6": [
+            "....######..", "..#########.", ".####...###.", ".###........",
+            "###...####..", "###########.", "####....####", "###......###",
+            "###......###", "###......###", "###......###", "####....####",
+            ".##########.", "..########..", "...######...", "....####....",
+        ],
+        "9": [
+            "....####....", "...######...", "..########..", ".##########.",
+            "####....####", "###......###", "###......###", "###......###",
+            "###......###", "####....####", ".###########", "..####...###",
+            "........###.", ".###...####.", ".#########..", "..######....",
+        ]
+    }
+
+    BOARD_CARD_SLOTS_SD = [
+        (0.159 + i * 0.1388, 0.468, 0.159 + i * 0.1388 + 0.126, 0.557)
+        for i in range(5)
+    ]
+
+    def _classify_gg_rank(self, char_glyph: Image.Image) -> Tuple[str, float]:
+        """Classifies 4-color Short Deck rank using dual-character 10 and 12x16 templates."""
+        cgw, cgh = char_glyph.size
+        col_proj = [sum(char_glyph.getpixel((x, y)) for y in range(cgh)) for x in range(cgw)]
+        if cgw >= cgh * 0.72 and len(col_proj) >= 7:
+            mid_start = int(cgw * 0.25)
+            mid_end = int(cgw * 0.75)
+            mid_valley = min(col_proj[mid_start:mid_end])
+            max_peak = max(col_proj)
+            if mid_valley <= max_peak * 0.05 or mid_valley <= 2:
+                return "T", 0.99
+                
+        norm_img = char_glyph.convert("L").resize((12, 16), Image.Resampling.BILINEAR)
+        norm_arr = (np.array(norm_img) > 128).astype(int)
+        
+        best_rank = "?"
+        best_score = -1.0
+        for r, tmpl_lines in self.GGPOKER_TEMPLATES_12x16.items():
+            tmpl_arr = np.array([[1 if c == '#' else 0 for c in line] for line in tmpl_lines])
+            intersection = np.sum((norm_arr == 1) & (tmpl_arr == 1))
+            union = np.sum((norm_arr == 1) | (tmpl_arr == 1))
+            score = intersection / float(union) if union > 0 else 0
+            if score > best_score:
+                best_score = score
+                best_rank = r
+        return best_rank, round(float(best_score), 3)
+
+    def _sample_card_suit(self, crop_img: Image.Image) -> Tuple[Optional[str], Optional[np.ndarray]]:
+        """Samples dominant suit background color behind the white rank glyph."""
+        arr = np.array(crop_img.convert("RGB"))
+        H, W = arr.shape[:2]
+        is_white = (arr[:,:,0] > 185) & (arr[:,:,1] > 185) & (arr[:,:,2] > 185)
+        sub_white = is_white[:int(H * 0.55), :int(W * 0.65)]
+        rows = np.where(np.any(sub_white, axis=1))[0]
+        cols = np.where(np.any(sub_white, axis=0))[0]
+        if len(rows) == 0 or len(cols) == 0:
+            return None, None
+        y1, y2 = rows[0], rows[-1]
+        x1, x2 = cols[0], cols[-1]
+        
+        py1, py2 = max(0, y1 - 5), min(H, y2 + 5)
+        px1, px2 = max(0, x1 - 5), min(W, x2 + 5)
+        patch = arr[py1:py2, px1:px2]
+        patch_white = is_white[py1:py2, px1:px2]
+        card_bg = patch[~patch_white]
+        if len(card_bg) == 0:
+            return None, None
+            
+        mean_rgb = np.median(card_bg, axis=0)
+        mr, mg, mb = mean_rgb
+        suit = None
+        if mr > 90 and mr > mg + 30 and mr > mb + 30:
+            suit = "h"
+        elif mg > 70 and mg > mr + 25 and mg > mb + 15:
+            suit = "c"
+        elif mb > 70 and mb > mr + 35 and mb > mg + 20:
+            suit = "d"
+        elif mr < 60 and mg < 60 and mb < 60:
+            suit = "s"
+        return suit, mean_rgb
+
+    def detect_community_cards_sd(self, img: Image.Image) -> BoardIntegrityReport:
+        """Detects community cards on 6-max Short Deck tables using calibrated 5-slot grid."""
+        W, H = img.size
+        detected_cards: List[DetectedCard] = []
+        for i, (nx1, ny1, nx2, ny2) in enumerate(self.BOARD_CARD_SLOTS_SD):
+            px1, py1 = int(nx1 * W), int(ny1 * H)
+            px2, py2 = int(nx2 * W), int(ny2 * H)
+            crop = img.crop((px1, py1, px2, py2))
+            arr = np.array(crop.convert("RGB"))
+            r, g, b = arr[:,:,0], arr[:,:,1], arr[:,:,2]
+            
+            red_px = np.sum((r > 110) & (g < 55) & (b < 55))
+            green_px = np.sum((g > 90) & (r < 55) & (b < 60))
+            blue_px = np.sum((b > 90) & (r < 50) & (g < 100))
+            white_mask = (r > 185) & (g > 185) & (b > 185)
+            white_px = np.sum(white_mask)
+            charcoal_px = np.sum((r > 20) & (r < 55) & (g > 20) & (g < 55) & (b > 20) & (b < 55) & (np.abs(r.astype(int) - b.astype(int)) < 12))
+            total_px = crop.size[0] * crop.size[1]
+            
+            suit = None
+            if red_px > 0.10 * total_px:
+                suit = "h"
+            elif green_px > 0.10 * total_px:
+                suit = "c"
+            elif blue_px > 0.10 * total_px:
+                suit = "d"
+            elif white_px > 0.04 * total_px and charcoal_px > 0.20 * total_px:
+                suit = "s"
+                
+            if suit and white_px > 0.02 * total_px:
+                rc = crop.crop((2, 2, int(crop.width * 0.45), int(crop.height * 0.40))).convert("RGB")
+                rc_arr = np.array(rc)
+                rc_white = (rc_arr[:,:,0] > 185) & (rc_arr[:,:,1] > 185) & (rc_arr[:,:,2] > 185)
+                rows = np.where(np.any(rc_white, axis=1))[0]
+                cols = np.where(np.any(rc_white, axis=0))[0]
+                if len(rows) > 0 and len(cols) > 0:
+                    glyph = rc_white[rows[0]:rows[-1]+1, cols[0]:cols[-1]+1]
+                    gh, gw = glyph.shape
+                    row_sums = np.sum(glyph, axis=1)
+                    gap_y = None
+                    for y in range(int(gh * 0.35), gh):
+                        if row_sums[y] == 0:
+                            gap_y = y
+                            break
+                    char_glyph = glyph[:gap_y, :] if gap_y else glyph[:int(gh * 0.65), :]
+                    r_rows = np.where(np.any(char_glyph, axis=1))[0]
+                    r_cols = np.where(np.any(char_glyph, axis=0))[0]
+                    if len(r_rows) > 0 and len(r_cols) > 0:
+                        trimmed = char_glyph[r_rows[0]:r_rows[-1]+1, r_cols[0]:r_cols[-1]+1]
+                        char_img = Image.fromarray((trimmed * 255).astype(np.uint8))
+                        rank, conf = self._classify_gg_rank(char_img)
+                        card_obj = DetectedCard(
+                            card=f"{rank}{suit}",
+                            rank=rank,
+                            suit=suit,
+                            confidence=conf,
+                            bbox=(px1, py1, px2, py2)
+                        )
+                        detected_cards.append(card_obj)
+        return self._validate_board(detected_cards)
+
+    def detect_hero_hole_cards_sd(self, full_screen: Image.Image, hero_box=(0.04, 0.70, 0.36, 0.89)) -> List[DetectedCard]:
+        """Detects Hero hole cards on 6-max Short Deck tables."""
+        W, H = full_screen.size
+        bx1, by1 = int(hero_box[0] * W), int(hero_box[1] * H)
+        bx2, by2 = int(hero_box[2] * W), int(hero_box[3] * H)
+        hero = full_screen.crop((bx1, by1, bx2, by2))
+        hw, hh = hero.size
+        
+        # Dual corner windows for Hero cards
+        c1_corner = hero.crop((int(hw * 0.04), int(hh * 0.25), int(hw * 0.34), int(hh * 0.55)))
+        c2_corner = hero.crop((int(hw * 0.33), int(hh * 0.25), int(hw * 0.62), int(hh * 0.55)))
+        
+        cards: List[DetectedCard] = []
+        for idx, (c_crop, (rel_x1, rel_x2)) in enumerate([
+            (c1_corner, (int(hw * 0.04), int(hw * 0.34))),
+            (c2_corner, (int(hw * 0.33), int(hw * 0.62)))
+        ]):
+            suit, _ = self._sample_card_suit(c_crop)
+            if not suit:
+                continue
+                
+            arr = np.array(c_crop.convert("RGB"))
+            H_c, W_c = arr.shape[:2]
+            quad = arr[:int(H_c * 0.60), :int(W_c * 0.65)]
+            white = (quad[:,:,0] > 185) & (quad[:,:,1] > 185) & (quad[:,:,2] > 185)
+            
+            # Extract largest component in quadrant
+            h_q, w_q = white.shape
+            visited = np.zeros((h_q, w_q), dtype=bool)
+            best_comp = []
+            for cy in range(h_q):
+                for cx in range(w_q):
+                    if white[cy, cx] and not visited[cy, cx]:
+                        comp = []
+                        q = [(cx, cy)]
+                        visited[cy, cx] = True
+                        while q:
+                            qx, qy = q.pop()
+                            comp.append((qy, qx))
+                            for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                                nx, ny = qx + dx, qy + dy
+                                if 0 <= nx < w_q and 0 <= ny < h_q and not visited[ny, nx] and white[ny, nx]:
+                                    visited[ny, nx] = True
+                                    q.append((nx, ny))
+                        if len(comp) > len(best_comp):
+                            best_comp = comp
+                            
+            if not best_comp:
+                continue
+                
+            comp_arr = np.zeros((h_q, w_q), dtype=bool)
+            for cy, cx in best_comp:
+                comp_arr[cy, cx] = True
+                
+            rows = np.where(np.any(comp_arr, axis=1))[0]
+            cols = np.where(np.any(comp_arr, axis=0))[0]
+            if len(rows) == 0 or len(cols) == 0:
+                continue
+                
+            trimmed = comp_arr[rows[0]:rows[-1]+1, cols[0]:cols[-1]+1]
+            char_img = Image.fromarray((trimmed * 255).astype(np.uint8))
+            rank, conf = self._classify_gg_rank(char_img)
+            if conf >= 0.65 and rank != "?":
+                cards.append(DetectedCard(
+                    card=f"{rank}{suit}",
+                    rank=rank,
+                    suit=suit,
+                    confidence=conf,
+                    bbox=(bx1 + rel_x1, by1 + int(hh * 0.25), bx1 + rel_x2, by1 + int(hh * 0.55))
+                ))
+        if len(cards) != 2:
+            return []
+        return cards
 
 if __name__ == "__main__":
     import argparse

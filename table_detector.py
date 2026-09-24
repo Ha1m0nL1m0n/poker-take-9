@@ -31,6 +31,7 @@ import sys
 import time
 from typing import List, Optional, Dict, Any, Tuple
 from PIL import Image, ImageOps
+import numpy as np
 
 # Native Windows OCR
 try:
@@ -152,8 +153,78 @@ SEATS_HEADS_UP = [
     }
 ]
 
+SEATS_6MAX_SD = [
+    {
+        "seat_id": 1,
+        "name": "Hero (Bottom-Left)",
+        "box": (0.02, 0.71, 0.36, 0.92),
+        "card_box": (0.04, 0.70, 0.36, 0.82),
+        "name_box": (0.05, 0.825, 0.28, 0.850),
+        "stack_box": (0.08, 0.850, 0.28, 0.880),
+        "vpip_box": (0.02, 0.79, 0.10, 0.84),
+        "bet_box": (0.24, 0.75, 0.36, 0.82),
+        "btn_box": (0.28, 0.77, 0.36, 0.84),
+    },
+    {
+        "seat_id": 2,
+        "name": "Seat 2 (Lower-Left)",
+        "box": (0.01, 0.50, 0.32, 0.705),
+        "card_box": (0.01, 0.54, 0.25, 0.65),
+        "name_box": (0.05, 0.650, 0.24, 0.675),
+        "stack_box": (0.05, 0.675, 0.24, 0.705),
+        "vpip_box": (0.00, 0.62, 0.08, 0.665),
+        "bet_box": (0.16, 0.58, 0.28, 0.65),
+        "btn_box": (0.24, 0.66, 0.32, 0.72),
+    },
+    {
+        "seat_id": 3,
+        "name": "Seat 3 (Top-Left)",
+        "box": (0.01, 0.27, 0.32, 0.495),
+        "card_box": (0.01, 0.27, 0.25, 0.36),
+        "name_box": (0.05, 0.360, 0.24, 0.388),
+        "stack_box": (0.05, 0.388, 0.24, 0.415),
+        "vpip_box": (0.00, 0.33, 0.08, 0.38),
+        "bet_box": (0.16, 0.35, 0.28, 0.42),
+        "btn_box": (0.24, 0.37, 0.32, 0.43),
+    },
+    {
+        "seat_id": 4,
+        "name": "Seat 4 (Top-Center)",
+        "box": (0.34, 0.14, 0.66, 0.32),
+        "card_box": (0.38, 0.14, 0.62, 0.23),
+        "name_box": (0.38, 0.230, 0.62, 0.255),
+        "stack_box": (0.40, 0.255, 0.60, 0.280),
+        "vpip_box": (0.34, 0.19, 0.42, 0.24),
+        "bet_box": (0.44, 0.28, 0.58, 0.35),
+        "btn_box": (0.60, 0.23, 0.67, 0.29),
+    },
+    {
+        "seat_id": 5,
+        "name": "Seat 5 (Top-Right)",
+        "box": (0.68, 0.27, 0.99, 0.495),
+        "card_box": (0.75, 0.27, 0.99, 0.36),
+        "name_box": (0.80, 0.360, 0.98, 0.388),
+        "stack_box": (0.80, 0.388, 0.98, 0.415),
+        "vpip_box": (0.75, 0.33, 0.83, 0.38),
+        "bet_box": (0.68, 0.35, 0.78, 0.42),
+        "btn_box": (0.82, 0.39, 0.89, 0.45),
+    },
+    {
+        "seat_id": 6,
+        "name": "Seat 6 (Bottom-Right)",
+        "box": (0.68, 0.50, 0.99, 0.705),
+        "card_box": (0.75, 0.54, 0.99, 0.65),
+        "name_box": (0.80, 0.650, 0.98, 0.675),
+        "stack_box": (0.80, 0.675, 0.98, 0.705),
+        "vpip_box": (0.75, 0.62, 0.83, 0.665),
+        "bet_box": (0.68, 0.58, 0.78, 0.65),
+        "btn_box": (0.82, 0.69, 0.89, 0.75),
+    }
+]
+
 COMMUNITY_CARDS_BOX = (0.18, 0.47, 0.82, 0.56)
 COMMUNITY_CARDS_HU_BOX = (0.15, 0.47, 0.85, 0.57)
+COMMUNITY_CARDS_SD_BOX = (0.14, 0.46, 0.86, 0.58)
 POT_BOX = (0.35, 0.43, 0.65, 0.48)
 BLINDS_BOX = (0.30, 0.63, 0.70, 0.72)
 WAITING_QUEUE_BOX = (0.50, 0.93, 0.95, 0.98)
@@ -318,11 +389,12 @@ class ClubGGTableDetector:
 
         table_state = PokerTableState()
 
-        # Determine table mode: Heads-Up vs 8-Max
+        # Determine table mode: Heads-Up vs 6-Max Short Deck vs 8-Max
         all_text_lower = " ".join(t[4].lower() for t in ocr_words)
         is_heads_up = ("rank" in all_text_lower and ("1st" in all_text_lower or "2nd" in all_text_lower)) or \
                       ("min." in all_text_lower and "stack" in all_text_lower) or \
                       ("next" in all_text_lower and "blinds" in all_text_lower)
+        is_short_deck = ("short deck" in all_text_lower) or ("short" in all_text_lower and "deck" in all_text_lower)
 
         if is_heads_up:
             table_state.table_type = "heads_up"
@@ -374,6 +446,53 @@ class ClubGGTableDetector:
             elif dealer_seat_id == 2:
                 seats[0].position = "BB"
                 seats[1].position = "BTN/SB"
+
+            # 8. Parse Action Buttons & Hero Turn Status
+            act_info = self._extract_action_buttons(ocr_words, w, h)
+            table_state.is_hero_turn = act_info["is_hero_turn"]
+            table_state.action_buttons = act_info
+        elif is_short_deck:
+            table_state.table_type = "6-max_sd"
+            table_state.game_type = "SD"
+            table_state.total_seats = 6
+
+            # 1. Parse Stakes / Ante
+            table_state.blinds = self._extract_blinds(ocr_words)
+
+            # 2. Parse Total Pot
+            table_state.total_pot = self._extract_total_pot(ocr_words, img)
+
+            # 3. Detect Community Cards & Board Stage (with calibrated 5-slot SD detector)
+            rep = self.card_detector.detect_community_cards_sd(img)
+            table_state.community_cards = [c.card for c in rep.cards]
+            table_state.board_stage = rep.stage.lower()
+            table_state.cards_detail = [c.to_dict() for c in rep.cards]
+            table_state.board_integrity = rep.to_dict()
+
+            # 4. Detect Hero Hole Cards (with dual-corner GGPoker template matching)
+            hero_card_objs = self.card_detector.detect_hero_hole_cards_sd(img)
+            table_state.hero_cards = [c.card for c in hero_card_objs]
+            table_state.hero_cards_detail = [c.to_dict() for c in hero_card_objs]
+
+            # 5. Detect Dealer Button ('D') Position
+            dealer_seat_id = self._detect_sd_dealer_button(img)
+            table_state.dealer_seat = dealer_seat_id
+
+            # 6. Parse 6 Seats (SEATS_6MAX_SD)
+            seats = []
+            for seat_cfg in SEATS_6MAX_SD:
+                seat_obj = self._analyze_seat(img, seat_cfg, ocr_words)
+                if seat_cfg["seat_id"] == 1:
+                    seat_obj.cards = list(table_state.hero_cards)
+                    seat_obj.cards_detail = list(table_state.hero_cards_detail)
+                    seat_obj.is_in_hand = (len(table_state.hero_cards) == 2)
+                    if not seat_obj.username:
+                        seat_obj.username = "haimontestin2"
+                        seat_obj.is_occupied = True
+                seats.append(seat_obj)
+
+            # 7. Assign Positions (BTN, SB, BB, UTG, MP, CO)
+            self._assign_positions(seats, dealer_seat_id)
 
             # 8. Parse Action Buttons & Hero Turn Status
             act_info = self._extract_action_buttons(ocr_words, w, h)
@@ -466,6 +585,12 @@ class ClubGGTableDetector:
     # Helper Extractors
     # ---------------------------------------------------------
     def _extract_blinds(self, words) -> Optional[str]:
+        # First check Short Deck pattern: Short Deck, $0.02 ($0.02)
+        text = " ".join(w[4] for w in words)
+        m_sd = re.search(r'Short\s*Deck,?\s*(\$[\d\.]+\s*\(\$[\d\.]+\))', text, re.IGNORECASE)
+        if m_sd:
+            return m_sd.group(1).replace(" ", "")
+
         # Search for pattern like "0.25/0.50" or "0.50/1" or "Blinds X/Y"
         for _, ny, _, _, text in words:
             if 0.58 <= ny <= 0.75:
@@ -476,6 +601,40 @@ class ClubGGTableDetector:
 
     def _extract_total_pot(self, words: List[Tuple], img: Optional[Image.Image] = None) -> Optional[float]:
         """Extracts total pot from center pot badge or felt chips badge with crop OCR fallback."""
+        # 1. Look for number directly below 'Pot' or 'Total Pot' (GGPoker top center pill)
+        for (wx, wy, ww, wh, text) in words:
+            if text.lower() == "pot" and 0.38 <= wy <= 0.48 and 0.35 <= wx <= 0.65:
+                for (nx, ny, nw, nh, ntext) in words:
+                    if 0.005 < ny - wy < 0.04 and abs(nx - wx) < 0.18:
+                        clean = re.sub(r'[^\d.]', '', ntext)
+                        if clean:
+                            try:
+                                return float(clean)
+                            except ValueError:
+                                pass
+
+        # Fast Crop OCR Fallback on Top Pot pill (norm x: 0.35..0.65, y: 0.40..0.47)
+        if img is not None:
+            w, h = img.size
+            c1 = img.crop((int(0.35 * w), int(0.40 * h), int(0.65 * w), int(0.47 * h)))
+            c1_2x = c1.resize((c1.width * 2, c1.height * 2), Image.LANCZOS)
+            c1_words = self.run_ocr(c1_2x)
+            for _, _, _, _, text in c1_words:
+                tl = text.lower()
+                if "pot" in tl or "total" in tl or "/" in text:
+                    continue
+                clean = re.sub(r'[^\d.]', '', text)
+                if clean:
+                    try:
+                        val = float(clean)
+                        if 0.1 <= val <= 1000000:
+                            return val
+                    except ValueError:
+                        pass
+
+        all_text = " ".join(w[4].lower() for w in words)
+        is_clubgg = "short deck" not in all_text and "short" not in all_text
+
         top_candidates = []
         lower_candidates = []
         for nx, ny, nw, nh, text in words:
@@ -487,9 +646,9 @@ class ClubGGTableDetector:
                 try:
                     val = float(m.group(0))
                     if 0.1 <= val <= 1000000:
-                        if 0.40 <= ny <= 0.52 and 0.35 <= nx <= 0.65:
+                        if 0.41 <= ny <= 0.46 and 0.40 <= nx <= 0.60:
                             top_candidates.append(val)
-                        elif 0.58 <= ny <= 0.65 and 0.40 <= nx <= 0.60:
+                        elif is_clubgg and 0.58 <= ny <= 0.65 and 0.40 <= nx <= 0.60:
                             lower_candidates.append(val)
                 except ValueError:
                     pass
@@ -499,27 +658,9 @@ class ClubGGTableDetector:
         if lower_candidates:
             return lower_candidates[0]
 
-        # Fast Crop OCR Fallback if global OCR missed the pot
-        if img is not None:
+        # Targeted crop on Lower Pot chip badge (ClubGG only, norm x: 0.40..0.60, y: 0.58..0.65)
+        if is_clubgg and img is not None:
             w, h = img.size
-            # 1. Targeted crop on Top Pot pill (norm x: 0.40..0.60, y: 0.42..0.50)
-            c1 = img.crop((int(0.40 * w), int(0.42 * h), int(0.60 * w), int(0.50 * h)))
-            c1_2x = c1.resize((c1.width * 2, c1.height * 2), Image.LANCZOS)
-            c1_words = self.run_ocr(c1_2x)
-            for _, _, _, _, text in c1_words:
-                tl = text.lower()
-                if "pot" in tl or "total" in tl or "/" in text:
-                    continue
-                m = re.search(r'\d+(?:\.\d+)?', text)
-                if m:
-                    try:
-                        val = float(m.group(0))
-                        if 0.1 <= val <= 1000000:
-                            return val
-                    except ValueError:
-                        pass
-
-            # 2. Targeted crop on Lower Pot chip badge (norm x: 0.40..0.60, y: 0.58..0.65)
             c2 = img.crop((int(0.40 * w), int(0.58 * h), int(0.60 * w), int(0.65 * h)))
             c2_2x = c2.resize((c2.width * 2, c2.height * 2), Image.LANCZOS)
             c2_words = self.run_ocr(c2_2x)
@@ -659,6 +800,24 @@ class ClubGGTableDetector:
                     return 2
         return None
 
+    def _detect_sd_dealer_button(self, img: Image.Image) -> Optional[int]:
+        """Detects dealer button position on 6-max Short Deck tables."""
+        w, h = img.size
+        best_seat = None
+        max_yellow = 0
+        for s in SEATS_6MAX_SD:
+            bx1, by1, bx2, by2 = s["btn_box"]
+            crop = img.crop((int(bx1 * w), int(by1 * h), int(bx2 * w), int(by2 * h)))
+            arr = np.array(crop.convert("RGB"))
+            r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
+            # Bright yellow disc: R > 200, G > 175, B < 90
+            is_yellow = (r > 200) & (g > 175) & (b < 90)
+            yellow_count = int(np.sum(is_yellow))
+            if yellow_count > 500 and yellow_count > max_yellow:
+                max_yellow = yellow_count
+                best_seat = s["seat_id"]
+        return best_seat
+
     def _extract_tournament_info(self, words: List[Tuple]) -> Dict[str, Any]:
         """Extracts tournament blinds, level timer, and Hero rank."""
         tourney_words = [w for w in words if 0.62 <= w[1] <= 0.76]
@@ -683,33 +842,40 @@ class ClubGGTableDetector:
         """Extracts action buttons state (Fold, Check, Call, Bet, Raise) and pricing."""
         bottom_words = [w for w in words if w[1] > 0.92]
         full_bot = " ".join(w[4] for w in sorted(bottom_words, key=lambda x: x[0]))
-        
-        can_fold = "Fold" in full_bot
-        can_check = "Check" in full_bot and "Fold" not in full_bot.split("Check")[0]
-        can_call = "Call" in full_bot
-        can_bet = "Bet" in full_bot
-        can_raise = "Raise" in full_bot
-        
-        is_hero_turn = can_check or can_call or can_bet or can_raise or (can_fold and "Check /" not in full_bot)
-        
+        bot_lower = full_bot.lower()
+
+        can_fold = "fold" in bot_lower
+        can_check = "check" in bot_lower and "check /" not in bot_lower
+        can_call = "call" in bot_lower
+        can_bet = "bet" in bot_lower
+        can_raise = "raise" in bot_lower
+
+        is_hero_turn = can_check or can_call or can_bet or can_raise or (can_fold and "check /" not in bot_lower)
+
         call_amount = None
         if can_call:
-            mid_words = [w for w in bottom_words if 0.38 <= w[0] <= 0.62]
+            mid_words = [w for w in bottom_words if 0.38 <= w[0] <= 0.65]
             for w in mid_words:
-                clean_num = w[4].replace(",", "").replace(".", "")
-                if clean_num.isdigit():
-                    call_amount = float(w[4].replace(",", ""))
-                    break
-                    
+                clean = re.sub(r'[^\d.]', '', w[4])
+                if clean:
+                    try:
+                        call_amount = float(clean)
+                        break
+                    except ValueError:
+                        pass
+
         bet_raise_amount = None
         if can_bet or can_raise:
-            right_words = [w for w in bottom_words if 0.75 <= w[0] <= 0.98]
+            right_words = [w for w in bottom_words if 0.70 <= w[0] <= 0.98]
             for w in right_words:
-                clean_num = w[4].replace(",", "").replace(".", "")
-                if clean_num.isdigit():
-                    bet_raise_amount = float(w[4].replace(",", ""))
-                    break
-                    
+                clean = re.sub(r'[^\d.]', '', w[4])
+                if clean:
+                    try:
+                        bet_raise_amount = float(clean)
+                        break
+                    except ValueError:
+                        pass
+
         sizing_words = [w for w in words if 0.75 <= w[1] <= 0.92 and 0.68 <= w[0] <= 0.98]
         presets = {}
         preset_text = " ".join(w[4] for w in sorted(sizing_words, key=lambda x: (x[1], x[0])))
@@ -728,9 +894,9 @@ class ClubGGTableDetector:
             "can_raise": can_raise,
             "bet_raise_amount": bet_raise_amount,
             "presets": presets,
-            "fold_tap": (184, 2169),
-            "check_call_tap": (504, 2165),
-            "bet_raise_tap": (867, 2165)
+            "fold_tap": (int(0.20 * img_w), int(0.96 * img_h)),
+            "check_call_tap": (int(0.50 * img_w), int(0.96 * img_h)),
+            "bet_raise_tap": (int(0.80 * img_w), int(0.96 * img_h))
         }
 
     def _clean_player_username(self, raw: str) -> Optional[str]:
@@ -776,9 +942,11 @@ class ClubGGTableDetector:
             cx = nx + nw / 2.0
             cy = ny + nh / 2.0
             # Exclude tokens situated inside any seat's bet box
-            if any(s["bet_box"][0] <= cx <= s["bet_box"][2] and s["bet_box"][1] <= cy <= s["bet_box"][3] for s in SEATS_8MAX):
+            check_seats = SEATS_6MAX_SD if "btn_box" in seat_cfg else SEATS_8MAX
+            if any(s["bet_box"][0] <= cx <= s["bet_box"][2] and s["bet_box"][1] <= cy <= s["bet_box"][3] for s in check_seats):
                 continue
-            if (bx1 - 0.02) <= cx <= (bx2 + 0.02) and (by1 - 0.02) <= cy <= (by2 + 0.02):
+            margin = 0.005 if "btn_box" in seat_cfg else 0.02
+            if (bx1 - margin) <= cx <= (bx2 + margin) and (by1 - margin) <= cy <= (by2 + margin):
                 is_cyan = self._is_cyan_token(img, nx, ny, nw, nh)
                 seat_words.append((cx, cy, nw, nh, text, is_cyan))
 
@@ -791,19 +959,30 @@ class ClubGGTableDetector:
             self._seat_stacks.pop(sid, None)
             return seat
 
-        # 2. In-Hand Detection (Check Card Backs)
+        # 2. In-Hand Detection (Check Card Backs: Gold for GGPoker, Bright for ClubGG)
         cx1, cy1, cx2, cy2 = seat_cfg["card_box"]
         c_crop = img.crop((int(cx1 * w), int(cy1 * h), int(cx2 * w), int(cy2 * h)))
-        c_pix = [c_crop.getpixel((x, y)) for y in range(c_crop.height) for x in range(c_crop.width)]
-        bright_px = sum(1 for p in c_pix if p[0] > 170 and p[1] > 170 and p[2] > 170)
-        card_ratio = bright_px / float(len(c_pix)) if c_pix else 0.0
-        seat.is_in_hand = (card_ratio > 0.16)
+        arr_c = np.array(c_crop.convert("RGB"))
+        r, g, b = arr_c[:,:,0], arr_c[:,:,1], arr_c[:,:,2]
+        gold_mask = (r > 120) & (r < 210) & (g > 90) & (g < 180) & (b > 20) & (b < 95) & (r > g) & (g > b)
+        gold_ratio = np.sum(gold_mask) / float(arr_c.shape[0] * arr_c.shape[1]) if arr_c.size > 0 else 0.0
+        bright_px = np.sum((r > 170) & (g > 170) & (b > 170))
+        card_ratio = bright_px / float(arr_c.shape[0] * arr_c.shape[1]) if arr_c.size > 0 else 0.0
+        seat.is_in_hand = (gold_ratio > 0.15) or (card_ratio > 0.16)
 
-        # 3. Action Badges (Check, Call, Bet, Raise, All-In, WIN)
-        action_keywords = ["check", "call", "bet", "raise", "all-in", "allin", "fold", "win"]
+        # 3. Action Badges (Check, Call, Bet, Raise, All-In, WIN, Cashout)
+        action_keywords = ["check", "call", "bet", "raise", "all-in", "allin", "fold", "win", "cashout"]
         for _, _, _, _, text, _ in seat_words:
-            tl = text.lower().replace("-", "")
-            for act in action_keywords:
+            tl = text.lower()
+            if re.search(r'all[-_\s]*[il1|]+n', text, re.IGNORECASE):
+                seat.action = "All-In"
+                seat.is_in_hand = True
+                break
+            if "cashout" in tl:
+                seat.is_sitting_out = True
+                seat.action = "Cashout"
+                break
+            for act in ["check", "call", "bet", "raise", "fold", "win"]:
                 if act in tl:
                     seat.action = act.capitalize()
                     break
